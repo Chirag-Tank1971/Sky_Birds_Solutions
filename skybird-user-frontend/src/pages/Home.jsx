@@ -29,6 +29,7 @@ import TestimonialVideos from "../components/Home/TestimonialVideos";
 import ClientLogos from "../components/ClientLogos";
 import RollText from "../components/RollText";
 import TopLoader from "../components/TopLoader";
+import FloatingTags from "../components/Home/FloatingTags";
 
 // Short rise on a no-bounce spring, so elements settle in rather than fly in.
 const fadeUp = {
@@ -280,6 +281,7 @@ export default function Home() {
 
 
       <section className="hero-mesh relative isolate overflow-hidden">
+        <FloatingTags />
         {/* Slowly rotating decorative rings behind the heading */}
         <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-24 -z-10 h-[620px] w-[620px] -translate-x-1/2 sm:h-[760px] sm:w-[760px]">
           <motion.div
@@ -296,7 +298,7 @@ export default function Home() {
           </motion.div>
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 pb-14 pt-12 sm:px-6 sm:pt-16 lg:px-8 lg:pb-20 lg:pt-20">
+        <div className="mx-auto max-w-7xl px-4 pb-14 pt-[122px] sm:px-6 sm:pt-[138px] lg:px-8 lg:pb-20 lg:pt-[154px]">
           {/* CENTRED INTRO */}
           <motion.div
             initial="hidden"
@@ -305,30 +307,10 @@ export default function Home() {
             variants={stagger}
             className="relative z-10 mx-auto max-w-4xl text-center"
           >
-            {/* Badge */}
-            <motion.div variants={fadeUp} className="flex justify-center">
-              <span className="inline-flex items-center gap-1 text-xs font-medium sm:text-[13px]">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-leaf">
-                  <motion.span
-                    animate={{ scale: [1, 1.4, 1] }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    className="h-2 w-2 rounded-full bg-white"
-                  />
-                </span>
-                <span className="rounded-md bg-black/[0.05] px-3 py-1.5 text-ink/70 backdrop-blur">
-                  {hero.badge || "Practical learning. Real-world skills."}
-                </span>
-              </span>
-            </motion.div>
-
             {/* Heading */}
             <motion.h1
               variants={fadeUp}
-              className="mx-auto mt-6 text-[2.15rem] font-black leading-[1.02] tracking-[-0.04em] text-ink sm:text-6xl lg:text-[4.5rem]"
+              className="mx-auto text-[2.15rem] font-black leading-[1.02] tracking-[-0.04em] text-ink sm:text-6xl lg:text-[4.5rem]"
             >
               {hero.title || "Learn E-Commerce."}
               <span className="block">

@@ -1,4 +1,5 @@
-import { motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useInView } from "motion/react";
 
 const clients = [
   { name: "african magic", logo: "/assets/clients/african magic.webp" },
@@ -56,182 +57,131 @@ const clients = [
   { name: "wishbone", logo: "/assets/clients/wishbone.webp" },
 ];
 
-const colors = [
-  "from-blue-50 to-cyan-50",
-  "from-orange-50 to-amber-50",
-  "from-purple-50 to-pink-50",
-  "from-emerald-50 to-teal-50",
-  "from-rose-50 to-orange-50",
-  "from-indigo-50 to-blue-50",
-  "from-yellow-50 to-lime-50",
-  "from-pink-50 to-fuchsia-50",
-];
+const SLOTS = 18; // 9 hexagons on each side of the centre
+const SWAP_EVERY_MS = 2200;
+const HEX = "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)";
 
-const borderColors = [
-  "border-blue-100",
-  "border-orange-100",
-  "border-purple-100",
-  "border-emerald-100",
-  "border-rose-100",
-  "border-indigo-100",
-  "border-yellow-100",
-  "border-pink-100",
-];
+// Hexagon positions in a cluster, in units of the hexagon width (--w).
+// The middle row is pushed towards the outside, like a honeycomb.
+const STEP_X = 1.12;
+const STEP_Y = 0.93;
+const clusterPositions = (side) =>
+  [0, 1, 2].flatMap((row) =>
+    [0, 1, 2].map((col) => {
+      const shifted = side === "left" ? row !== 1 : row === 1;
+      return { x: col * STEP_X + (shifted ? STEP_X / 2 : 0), y: row * STEP_Y };
+    }),
+  );
 
-// Split all logos into rows
-const rows = [];
+const popIn = {
+  hidden: { opacity: 0, scale: 0.6 },
+  visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.7 } },
+};
 
-for (let i = 0; i < clients.length; i += 15) {
-  rows.push(clients.slice(i, i + 15));
+// Logo files are squares with their own background. Sample a corner pixel so
+// the hexagon can take that colour and the square edges disappear.
+const backgroundCache = new Map();
+function logoBackground(img) {
+  if (backgroundCache.has(img.src)) return backgroundCache.get(img.src);
+  let color = "#ffffff";
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 2, 2, 1, 1, 0, 0, 1, 1);
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+    if (a > 200) color = `rgb(${r}, ${g}, ${b})`;
+  } catch {
+    // Unreadable image: keep the white hexagon.
+  }
+  backgroundCache.set(img.src, color);
+  return color;
 }
 
-function ClientCard({ client, index }) {
-  const colorIndex = index % colors.length;
-
+function Hex({ client, x, y }) {
+  const [background, setBackground] = useState(() => backgroundCache.get(new URL(client.logo, window.location.href).href) || "#ffffff");
   return (
-    <div
-      className={`
-        group relative
-        flex h-[70px] w-[90px] md:h-[105px]
-        md:w-[125px]
-        shrink-0
-        flex-col
-        items-center
-        justify-center
-        overflow-hidden
-        rounded-2xl
-        border
-        ${borderColors[colorIndex]}
-        bg-gradient-to-br
-        ${colors[colorIndex]}
-        p-3
-        shadow-sm
-        transition-all
-        duration-300
-        hover:-translate-y-1
-        hover:scale-[1.03]
-        hover:shadow-xl
-      `}
+    <motion.div
+      variants={popIn}
+      title={client.name}
+      className="group absolute h-[calc(var(--w)*1.1547)] w-[var(--w)] transition-[scale] duration-300 hover:scale-105"
+      style={{ left: `calc(var(--w) * ${x})`, top: `calc(var(--w) * ${y})` }}
     >
-      {/* Decorative circle */}
       <div
-        className="
-          pointer-events-none
-          absolute -right-5 -top-5
-          h-14 w-14
-          rounded-full
-          bg-white/50
-          blur-sm
-          transition-transform
-          duration-500
-          group-hover:scale-150
-        "
-      />
-
-      {/* Logo */}
-      <div className="relative flex h-[62px] w-full items-center justify-center">
-        <img decoding="async"
-          src={client.logo}
-          alt={client.name}
-          loading="lazy"
-          className="
-            max-h-[55px]
-            max-w-[100px]
-            object-contain
-            transition-all
-            duration-500
-            group-hover:scale-110
-          "
-        />
+        className="relative h-full w-full transition-colors duration-500"
+        style={{ clipPath: HEX, backgroundColor: background }}
+      >
+        <AnimatePresence initial={false}>
+          <motion.img
+            key={client.logo}
+            src={client.logo}
+            alt={client.name}
+            loading="lazy"
+            decoding="async"
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            onLoad={(event) => setBackground(logoBackground(event.currentTarget))}
+            // Even padding keeps every logo clear of the hexagon's angled corners.
+            className="absolute inset-0 m-auto h-[76%] w-[76%] object-contain"
+          />
+        </AnimatePresence>
       </div>
-
-      {/* Name */}
-      <span
-        className="
-          relative
-          mt-1
-          max-w-full
-          truncate
-          text-[14px]
-          font-semibold
-          text-black
-          transition-colors
-          duration-300
-          group-hover:text-forest
-        "
-      >
-        {client.name}
-      </span>
-    </div>
+    </motion.div>
   );
 }
 
-
- 
-
-   
-function ClientRow({ clients: rowClients, rowIndex }) {
-  const isReverse = rowIndex % 2 === 1;
-
+function Cluster({ side, slots, className = "" }) {
   return (
-    <div
-      className="relative w-full overflow-hidden py-2"
-      style={{
-        maskImage:
-          "linear-gradient(to right, transparent, black 5%, black 95%, transparent)",
-      }}
+    <motion.div
+      variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
+      // One shadow for the whole cluster is far cheaper than one per hexagon.
+      className={`relative h-[calc(var(--w)*3.01)] w-[calc(var(--w)*3.8)] shrink-0 drop-shadow-[0_10px_18px_rgba(32,29,29,0.08)] ${className}`}
     >
-      {/* Endless scroll: two identical groups, so moving by half loops seamlessly. */}
-      <motion.div
-        className="client-marquee-track"
-        initial={{ x: isReverse ? "-50%" : "0%" }}
-        animate={{ x: isReverse ? "0%" : "-50%" }}
-        transition={{ duration: 30, ease: "linear", repeat: Infinity }}
-      >
-        {[0, 1].map((group) => (
-          <div
-            key={group}
-            className="client-marquee-group"
-            aria-hidden={group === 1}
-          >
-            {rowClients.map((client, index) => (
-              <ClientCard
-                key={`${client.name}-${rowIndex}-${group}`}
-                client={client}
-                index={index + rowIndex}
-              />
-            ))}
-          </div>
-        ))}
-      </motion.div>
-    </div>
+      {clusterPositions(side).map((pos, i) => (
+        <Hex key={i} client={clients[slots[i]]} {...pos} />
+      ))}
+    </motion.div>
   );
 }
-
-
-
-
 
 export default function ClientLogos() {
+  const sectionRef = useRef(null);
+  const inView = useInView(sectionRef, { amount: 0.2 });
+  // Which client each of the 18 hexagons shows; tiles swap one at a time so
+  // all 50 brands appear over time.
+  const [slots, setSlots] = useState(() => clients.slice(0, SLOTS).map((_, i) => i));
+  const nextClient = useRef(SLOTS);
+
+  useEffect(() => {
+    if (!inView) return undefined; // only cycle while the section is on screen
+    const timer = setInterval(() => {
+      setSlots((current) => {
+        let candidate = nextClient.current % clients.length;
+        while (current.includes(candidate)) candidate = (candidate + 1) % clients.length;
+        nextClient.current = candidate + 1;
+        const next = [...current];
+        next[Math.floor(Math.random() * SLOTS)] = candidate;
+        return next;
+      });
+    }, SWAP_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [inView]);
+
   return (
-    <section className="relative mx-auto overflow-hidden rounded-3xl bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-100 py-20 pb-10 sm:py-2">
-      {/* Background */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-[10%] top-10 h-72 w-72 rounded-full bg-sky-200/45 blur-[100px]" />
-
-        <div className="absolute right-[5%] top-1/3 h-80 w-80 rounded-full bg-indigo-200/40 blur-[110px]" />
-
-        <div className="absolute bottom-0 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-violet-200/35 blur-[100px]" />
-      </div>
-
-      <div className="relative  max-w-7xl mx-auto">
+    <section
+      ref={sectionRef}
+      className="relative mx-auto overflow-hidden rounded-3xl bg-[radial-gradient(60%_60%_at_50%_55%,rgba(110,189,68,0.12),transparent_70%),linear-gradient(180deg,#fafafa,#f2f2f2)] px-4 py-16 sm:py-20"
+    >
+      <div className="relative mx-auto max-w-7xl">
         {/* Heading */}
         <motion.div
           initial={{ opacity: 0, y: 25 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
-          className="mx-auto mb-12 max-w-3xl px-4 text-center"
+          className="mx-auto mb-12 max-w-3xl text-center"
         >
           {/* Badge */}
           <div
@@ -266,16 +216,38 @@ export default function ClientLogos() {
           </p>
         </motion.div>
 
-        {/* Client Rows */}
-        <div className="space-y-3">
-          {rows.map((row, index) => (
-            <ClientRow
-              key={`client-row-${index}`}
-              clients={row}
-              rowIndex={index}
-            />
-          ))}
-        </div>
+        {/* Honeycomb: left cluster, Sky Birds hexagon, right cluster */}
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={{ visible: { transition: { staggerChildren: 0.12 } } }}
+          className="flex flex-col items-center justify-center gap-8 [--w:84px] sm:[--w:104px] lg:flex-row lg:gap-10 lg:[--w:92px] xl:[--w:112px]"
+        >
+          <Cluster side="left" slots={slots.slice(0, 9)} className="order-2 lg:order-1" />
+
+          <motion.div
+            variants={popIn}
+            className="relative order-1 h-[calc(var(--w)*2.6*1.1547)] w-[calc(var(--w)*2.6)] shrink-0 lg:order-2"
+          >
+            <div className="absolute inset-[12%] rounded-full bg-leaf/40 blur-2xl" />
+            <div
+              className="relative grid h-full w-full place-items-center bg-[radial-gradient(circle_at_50%_30%,#2e6b2e,#201d1d_70%)]"
+              style={{ clipPath: HEX }}
+            >
+              <img
+                src="/assets/logo1.webp"
+                alt="Sky Birds Solution"
+                loading="lazy"
+                decoding="async"
+                className="h-[52%] w-[52%] object-contain"
+              />
+            </div>
+          </motion.div>
+
+          {/* Phones show one cluster; it still cycles through every brand. */}
+          <Cluster side="right" slots={slots.slice(9)} className="order-3 hidden lg:block" />
+        </motion.div>
 
         {/* Bottom Stats */}
         <motion.div
@@ -290,7 +262,6 @@ export default function ClientLogos() {
             items-center
             justify-center
             gap-3
-            px-4
           "
         >
           <div className="rounded-full border border-blue-100 bg-blue-50 px-5 py-2.5 text-xs font-semibold text-blue-700">

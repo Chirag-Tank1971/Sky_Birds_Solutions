@@ -1,5 +1,6 @@
-// Set a new password for an admin account in the database from MONGODB_URI.
-// Usage: npm run set-admin-password -- admin@example.com
+// Set a new password for an admin account in the database from MONGODB_URI,
+// creating the account first if it does not exist (e.g. a fresh database).
+// Usage: npm run set-admin-password -- you@yourcompany.com
 // The password is typed into the terminal (hidden) and is never printed or logged.
 const readline = require("readline");
 const dotenv = require("dotenv");
@@ -41,12 +42,13 @@ function askHidden(question) {
 
 async function main() {
   const email = String(process.argv[2] || "").trim().toLowerCase();
-  if (!email) throw new Error("Give the admin email: npm run set-admin-password -- admin@example.com");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Give the admin email: npm run set-admin-password -- you@yourcompany.com");
   if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI is not set in .env");
 
   await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 10000 });
-  const admin = await Admin.findOne({ email });
-  if (!admin) throw new Error(`No admin account found for ${email}`);
+  const existing = await Admin.findOne({ email });
+  const admin = existing || new Admin({ email });
+  if (!existing) console.log(`No admin account for ${email} yet; it will be created.`);
 
   const password = await askHidden(`New password for ${email} (at least ${MIN_LENGTH} characters): `);
   if (password.length < MIN_LENGTH) throw new Error(`Password must be at least ${MIN_LENGTH} characters. Nothing was changed.`);
@@ -57,7 +59,7 @@ async function main() {
   // The Admin model hashes the password with bcrypt when it is saved.
   admin.password = password;
   await admin.save();
-  console.log(`Password updated for ${email}. You can now log in to the admin panel.`);
+  console.log(`${existing ? "Password updated" : "Admin account created"} for ${email}. You can now log in to the admin panel.`);
 }
 
 main()

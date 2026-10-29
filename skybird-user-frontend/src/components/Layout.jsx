@@ -35,7 +35,8 @@ export default function Layout() {
       <SiteSEO />
       <Navbar />
 
-      <main className="flex-1">
+      {/* The home hero runs under the floating header; other pages start below it (74px = header height). */}
+      <main className={`flex-1 ${location.pathname === "/" ? "" : "pt-[74px]"}`}>
         {/* No initial={false} here: it would also stop every looping animation
             (rings, marquee, pulses) on the first page a visitor opens. */}
         <AnimatePresence mode="wait" onExitComplete={scrollToTop}>

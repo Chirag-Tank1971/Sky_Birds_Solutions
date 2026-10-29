@@ -66,7 +66,11 @@
       "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/shine.js\" .)",
       "Bash(cp main.jsx /c/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/main.jsx.bak)",
       "Bash(sed -i 's/reducedMotion=\"user\"/reducedMotion=\"never\"/' main.jsx)",
-      "Bash(cp /c/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/main.jsx.bak /d/WORK/Sky_Birds_Solutions/skybird-user-frontend/src/main.jsx && grep -n reducedMotion /d/WORK/Sky_Birds_Solutions/skybird-user-frontend/src/main.jsx)"
+      "Bash(cp /c/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/main.jsx.bak /d/WORK/Sky_Birds_Solutions/skybird-user-frontend/src/main.jsx && grep -n reducedMotion /d/WORK/Sky_Birds_Solutions/skybird-user-frontend/src/main.jsx)",
+      "Bash(curl -s -o /dev/null -w \"dev server 5173: %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(grep -n \"{/\\\\* Badge \\\\*/}\\\\|hero.badge\\\\|className=\\\\\"mx-auto mt-6 text-\\\\[2.15rem\\\\]\" pages/Home.jsx)",
+      "Bash(git -C /d/WORK/Sky_Birds_Solutions log --oneline -3)",
+      "Bash(timeout 30 node scripts/set-admin-password.js owner@test.com)"
     ],
     "additionalDirectories": [
       "C:\\Users\\DELL\\AppData\\Local\\Temp\\claude\\d--WORK-Sky-Birds-Solutions\\f887111b-1a5c-418b-9ceb-305f67738077\\scratchpad"

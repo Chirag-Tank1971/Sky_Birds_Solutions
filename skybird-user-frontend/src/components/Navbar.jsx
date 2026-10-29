@@ -31,17 +31,16 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 px-4 pt-3">
-        {/* Glass Navbar */}
+      {/* -mb pulls the page up under the header so it floats over the hero; Layout adds the space back on other pages. */}
+      <header className="sticky top-0 z-50 -mb-[74px] px-4 pt-3">
+        {/* Navbar: same solid dark green as the footer, so nothing shows through */}
         <div
           className="
             mx-auto max-w-6xl
             rounded-2xl
-            border border-white/60
-            bg-black/90
-            shadow-lg shadow-slate-900/5
-            backdrop-blur-2xl
-            backdrop-saturate-150
+            border border-white/10
+            bg-[#10251D]
+            shadow-lg shadow-slate-900/10
           "
         >
           <div className="flex min-h-[60px] items-center justify-between gap-4 px-5 sm:px-6">

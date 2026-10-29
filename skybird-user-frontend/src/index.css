@@ -43,21 +43,6 @@ body {
 /* All animation is done with Motion (Framer Motion). The rules below are
    layout only. */
 
-/* ---------- Client logo marquee (ClientLogos) ---------- */
-.client-marquee-track {
-  display: flex;
-  width: max-content;
-  flex-wrap: nowrap;
-  will-change: transform;
-}
-
-.client-marquee-group {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 1rem;
-  padding-right: 1rem;
-}
-
 /* ---------- Text roll (RollText): two stacked copies of the label ---------- */
 .roll-text {
   display: inline-grid;
