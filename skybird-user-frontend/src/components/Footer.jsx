@@ -96,7 +96,7 @@ function Icon({ name, size = 20, className = "" }) {
 export default function Footer() {
   const { isAuthenticated } = useUser();
   const [support, setSupport] = useState({
-    email: "support@skybirds.in",
+    email: "team@skybirdssolution.com",
     phone: "",
     whatsapp: "",
   });
@@ -120,7 +120,7 @@ export default function Footer() {
     };
   }, []);
 
-  const email = support.email || "support@skybirds.in";
+  const email = support.email || "team@skybirdssolution.com";
   const phone = support.phone || support.mobile || "";
   const whatsapp = support.whatsapp || phone;
 
@@ -143,19 +143,6 @@ export default function Footer() {
         : "link",
       color: item.color || "hover:bg-emerald-600",
     })),
-    ...(!configuredSocialLinks.some(
-      (item) =>
-        String(item.platform || item.name || "").toLowerCase() === "whatsapp",
-    ) && whatsapp
-      ? [
-          {
-            name: "WhatsApp",
-            href: whatsappUrl,
-            icon: "whatsapp",
-            color: "hover:bg-green-600",
-          },
-        ]
-      : []),
   ];
 
   const quickLinks = [
@@ -202,7 +189,7 @@ export default function Footer() {
               guidance and expert support.
             </p>
 
-            <div className="mt-6 flex items-center gap-3">
+            <div className={`mt-6 items-center gap-3 ${socialLinks.length ? "flex" : "hidden"}`}>
               {socialLinks.map((item) => (
                 <a
                   key={item.name}
@@ -335,14 +322,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="flex flex-col gap-4 border-t border-white/10 py-6 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <p className="text-xs leading-6 text-white/45">
-            © {new Date().getFullYear()} SkyBirds Academy. All rights reserved.{" "}
-            <a
-              href="https://marketbloomss.com/"
-              target="blank"
-              className="underline"
-            >
-              Design by Market Bloomss
-            </a>
+            © {new Date().getFullYear()} SkyBirds E-Commerce solution. All rights reserved.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-white/45 sm:justify-end">

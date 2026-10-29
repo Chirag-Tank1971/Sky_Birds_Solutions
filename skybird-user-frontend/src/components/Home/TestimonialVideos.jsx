@@ -195,9 +195,6 @@ function TestimonialCard({ item }) {
       </button>
 
       <div className="absolute bottom-0 left-0 right-0 z-10 p-5 sm:p-6">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-leaf/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#10251D]">
-          <Play size={9} fill="currentColor" /> Student story
-        </span>
         <p className="mt-2 text-base font-bold leading-6 text-white sm:text-lg">
           “{item.quote}”
         </p>
@@ -254,11 +251,7 @@ export default function TestimonialVideos() {
       <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-[0.8fr_2fr] lg:px-8">
         {/* Heading and controls */}
         <div className="text-center lg:text-left">
-          <span className="inline-flex items-center gap-2 rounded-full border border-forest/10 bg-white px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-forest shadow-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-leaf" />
-            Student Stories
-          </span>
-          <h2 className="mt-5 text-3xl font-black leading-[1.05] tracking-tight text-ink sm:text-4xl lg:text-5xl">
+          <h2 className="text-3xl font-black leading-[1.05] tracking-tight text-ink sm:text-4xl lg:text-5xl">
             Real Sellers.
             <span className="block text-leaf">Real Stories.</span>
           </h2>

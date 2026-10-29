@@ -81,7 +81,20 @@
       "Bash(grep -n \"^\\\\s*SB\\\\s*$\" pages/Login.jsx)",
       "Bash(node -e \"const l=require\\('lucide-react'\\);console.log\\(['LogIn','UserPlus','BookOpen','LifeBuoy','LayoutDashboard','LogOut','ChevronDown','UserRound'].map\\(n=>n+':'+\\(n in l\\)\\).join\\(' '\\)\\)\")",
       "Bash(sed -i 's|<RollText>Login / Register</RollText>|<RollText>Sign in / Sign up</RollText>|' src/components/Navbar.jsx)",
-      "Bash(sed -i 's|    mobile: \"Login / Register\",|    mobile: \"Sign in / Sign up\",|' src/pages/Login.jsx)"
+      "Bash(sed -i 's|    mobile: \"Login / Register\",|    mobile: \"Sign in / Sign up\",|' src/pages/Login.jsx)",
+      "Bash(grep -n \"^import { useEffect, useState }\\\\|^import { motion\" pages/Home.jsx)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/remove-eyebrows.js\" .)",
+      "Bash(git -C /d/WORK/Sky_Birds_Solutions diff --stat -- skybird-user-frontend/src)",
+      "Bash(grep -E \"^[A-Z]:|\\\\\\\\\\\\\\\\src\")",
+      "Bash(sed -i '/{ name: \"m password\", logo: \"\\\\/assets\\\\/clients\\\\/m password.webp\" },/d' src/components/ClientLogos.jsx)",
+      "Bash(git rm *)",
+      "Bash(cd /d/WORK/Sky_Birds_Solutions/skybird-user-frontend/src && sed -n 120,130p components/Footer.jsx; grep -n \"whatsapp\" ../../skybird-api/config/siteDefaults.js ../../skybird-api/controllers/siteController.js)",
+      "Read(//d/skybird-api/config/**)",
+      "Bash(node --check skybird-api/config/siteDefaults.js)",
+      "Bash(node --check skybird-api/controllers/siteController.js)",
+      "Read(//d/WORK/**)",
+      "PowerShell(npx vite build 2>&1)",
+      "PowerShell(npx eslint src/pages/Contact.jsx)"
     ],
     "additionalDirectories": [
       "C:\\Users\\DELL\\AppData\\Local\\Temp\\claude\\d--WORK-Sky-Birds-Solutions\\f887111b-1a5c-418b-9ceb-305f67738077\\scratchpad"

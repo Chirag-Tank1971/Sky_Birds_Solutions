@@ -24,7 +24,7 @@ const defaultStats = [
     label: "Revenue Generated Through Brand-Building Work",
     icon: TrendingUp,
   },
-  { value: "400+", label: "Brands Helped Build", icon: Users },
+  { value: "500+", label: "Brands Helped Build", icon: Users },
 ];
 
 const defaultServices = [
@@ -143,8 +143,8 @@ export default function About() {
       .then((res) => {
         if (!cancelled && res.success) setSiteContent(res.data || {});
       })
-      .catch(() => {})
-      .finally(() => {});
+      .catch(() => { })
+      .finally(() => { });
     return () => {
       cancelled = true;
     };
@@ -167,25 +167,25 @@ export default function About() {
   const stats =
     Array.isArray(content.stats) && content.stats.length
       ? content.stats.map((item, index) => ({
-          ...item,
-          icon: defaultStats[index]?.icon || Award,
-        }))
+        ...item,
+        icon: defaultStats[index]?.icon || Award,
+      }))
       : defaultStats;
 
   const services =
     Array.isArray(content.servicesList) && content.servicesList.length
       ? content.servicesList.map((item, index) => ({
-          ...item,
-          icon: defaultServices[index]?.icon || BookOpen,
-        }))
+        ...item,
+        icon: defaultServices[index]?.icon || BookOpen,
+      }))
       : defaultServices;
 
   const promises =
     Array.isArray(content.promises) && content.promises.length
       ? content.promises.map((item, index) => ({
-          ...item,
-          icon: defaultPromises[index]?.icon || CheckCircle,
-        }))
+        ...item,
+        icon: defaultPromises[index]?.icon || CheckCircle,
+      }))
       : defaultPromises;
 
   return (
@@ -195,9 +195,6 @@ export default function About() {
         <div className="overflow-hidden rounded-[2rem] border border-forest/10 bg-gradient-to-br from-white via-mint/20 to-leaf/10 shadow-sm">
           <div className="grid items-center gap-8 p-2 sm:gap-10 sm:p-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14 lg:p-12">
             <div className="order-2 min-w-0 lg:order-1">
-              <span className="inline-flex items-center rounded-full border border-leaf/20 bg-white/80 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-forest">
-                My Story
-              </span>
               <h2
                 id="about-trainer-heading"
                 className="mt-4 text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl lg:text-5xl"
@@ -307,12 +304,7 @@ export default function About() {
 
         <div className="relative grid items-center gap-12 lg:grid-cols-2">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-leaf/20 bg-white/80 px-4 py-2 text-xs font-bold uppercase tracking-wider text-forest shadow-sm">
-              <span className="h-2 w-2 rounded-full bg-leaf" />
-              {about.hero.badge}
-            </span>
-
-            <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-tight text-gray-900 sm:text-5xl lg:text-6xl">
+            <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-gray-900 sm:text-5xl lg:text-6xl">
               {about.hero.title}
               <span className="mt-1 block text-forest">
                 {about.hero.highlight}
@@ -355,9 +347,6 @@ export default function About() {
             <div className="relative overflow-hidden rounded-[1.75rem] bg-forest p-7 text-white shadow-2xl sm:p-9">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-white/60">
-                    Our Approach
-                  </span>
                   <h2 className="mt-3 text-2xl font-bold sm:text-3xl">
                     Real Lessons.
                     <span className="block text-leaf">
@@ -405,9 +394,6 @@ export default function About() {
       <section>
         <div className="grid gap-8 lg:grid-cols-2 lg:gap-16">
           <div>
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-leaf">
-              {about.who.badge}
-            </span>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
               {about.who.title}
             </h2>
@@ -446,9 +432,6 @@ export default function About() {
       <section>
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-leaf">
-              {about.services.badge}
-            </span>
             <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
               {about.services.title}
             </h2>
@@ -485,16 +468,13 @@ export default function About() {
         </div>
       </section>
 
-       
+
 
       <section>
         <div className="overflow-hidden rounded-[2rem] bg-forest p-7 text-white shadow-xl sm:p-10 lg:p-12">
-          <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+          <div>
             <div className="max-w-2xl">
-              <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-leaf">
-                {about.impact.badge}
-              </span>
-              <h2 className="mt-5 text-3xl font-extrabold tracking-tight sm:text-4xl">
+              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
                 {about.impact.title}
                 <span className="block text-leaf">
                   {about.impact.highlight}
@@ -503,19 +483,6 @@ export default function About() {
               <p className="mt-4 text-sm leading-7 text-white/70">
                 {about.impact.description}
               </p>
-            </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.07] p-4">
-              <div className="grid h-11 w-11 place-items-center rounded-xl bg-leaf/15">
-                <Users className="h-5 w-5 text-leaf" />
-              </div>
-              <div>
-                <p className="text-2xl font-extrabold">
-                  {about.impact.empoweredValue}
-                </p>
-                <p className="mt-1 text-xs text-white/65">
-                  {about.impact.empoweredLabel}
-                </p>
-              </div>
             </div>
           </div>
           <div className="mt-9 grid grid-cols-2 gap-4 lg:grid-cols-4">

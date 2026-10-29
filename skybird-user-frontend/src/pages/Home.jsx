@@ -93,10 +93,10 @@ const contentSections = [
 
     icon: BookOpen,
 
-    title: "Amazon Seller Training Courses India",
+    title: "Amazon Seller Training Courses",
 
     paragraphs: [
-      "It is important for budding entrepreneurs in India to understand the Indian e-commerce ecosystem. Sky Birds Solution offers Amazon seller training courses India the opportunity to develop their knowledge of online selling and marketplace management.",
+      "It is important for budding entrepreneurs in India to understand the Indian e-commerce ecosystem. Sky Birds Solution offers Amazon seller training courses that give them the opportunity to develop their knowledge of online selling and marketplace management.",
 
       "Our programs are specially designed for students, entrepreneurs, working professionals, and small-business owners. They are also applicable for anyone interested in sharpening their e-commerce skills.",
     ],
@@ -548,9 +548,6 @@ export default function Home() {
           className="mb-9 flex flex-col justify-between gap-4 border-b border-forest/10 pb-5 sm:flex-row sm:items-end"
         >
           <div>
-            <span className="text-xs font-bold uppercase tracking-[.18em] text-leaf">
-              {home.featured?.eyebrow || "Start learning"}
-            </span>
 
             <h2 className="mt-2 text-3xl font-extrabold text-ink sm:text-4xl">
               {home.featured?.title || "Featured Video Courses"}
@@ -635,9 +632,6 @@ export default function Home() {
             viewport={{ once: true }}
             className="mx-auto mb-12 max-w-3xl text-center"
           >
-            <span className="text-xs font-bold uppercase tracking-[.18em] text-leaf">
-              Your learning path
-            </span>
 
             <h2 className="mt-3 text-3xl font-extrabold text-ink sm:text-4xl">
               Explore Amazon &amp; E-Commerce, Step by Step
@@ -699,13 +693,6 @@ export default function Home() {
                             </p>
                           )}
 
-                          <div className="mt-7 flex items-center gap-3">
-                            <div className="h-1 w-14 rounded-full bg-leaf" />
-
-                            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                              Start your journey
-                            </span>
-                          </div>
                         </div>
                       </div>
 
@@ -995,12 +982,6 @@ export default function Home() {
           whileInView="visible"
           viewport={{ once: true }}
         >
-          <motion.span
-            variants={fadeUp}
-            className="text-xs font-bold uppercase tracking-[.18em] text-leaf"
-          >
-            {home.learning?.eyebrow || "Learn with purpose"}
-          </motion.span>
 
           <motion.h2
             variants={fadeUp}
@@ -1050,9 +1031,6 @@ export default function Home() {
             viewport={{ once: true }}
             className="mb-9 text-center"
           >
-            <span className="text-xs font-bold uppercase tracking-[.18em] text-leaf">
-              {home.faq?.eyebrow || "Need to know"}
-            </span>
 
             <h2 className="mt-3 text-3xl font-extrabold text-ink sm:text-4xl">
               {home.faq?.title || "Frequently Asked Questions"}
@@ -1150,9 +1128,6 @@ export default function Home() {
             <div className="pointer-events-none absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-leaf/30 blur-3xl" />
 
             <div className="relative z-10">
-              <p className="text-xs font-bold uppercase tracking-[.2em] text-white/85">
-                {home.cta?.eyebrow || "Your next chapter starts here"}
-              </p>
 
               <h2 className="mt-4 text-4xl font-black leading-[1.02] tracking-[-0.04em] text-white sm:text-5xl lg:text-[3.25rem]">
                 {home.cta?.title ||

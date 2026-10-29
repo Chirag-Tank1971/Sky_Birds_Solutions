@@ -14,7 +14,7 @@ const faqs = [
   {
     question: "How can I contact customer support?",
     answer:
-      "You can reach our support team 24/7 via the Help Center chat, by emailing support@skybird.com, or by submitting a ticket from your account dashboard.",
+      "You can reach our support team 24/7 via the Help Center chat, by emailing team@skybirdssolution.com, or by submitting a ticket from your account dashboard.",
   },
   {
     question: "How do I delete my account?",

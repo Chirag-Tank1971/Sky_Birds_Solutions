@@ -29,7 +29,6 @@ const clients = [
   { name: "Kumijashi", logo: "/assets/clients/Kumijashi.webp" },
   { name: "lemon deal", logo: "/assets/clients/lemon deal.webp" },
   { name: "Loccus", logo: "/assets/clients/Loccus.webp" },
-  { name: "m password", logo: "/assets/clients/m password.webp" },
   { name: "MP", logo: "/assets/clients/MP.webp" },
 
   { name: "nilkanth", logo: "/assets/clients/nilkanth.webp" },
@@ -208,30 +207,7 @@ export default function ClientLogos() {
           transition={{ duration: 0.7 }}
           className="mx-auto mb-12 max-w-3xl text-center"
         >
-          {/* Badge */}
-          <div
-            className="
-              mx-auto inline-flex
-              items-center gap-2
-              rounded-full
-              border border-forest/10
-              bg-forest/5
-              px-4 py-2
-              text-[10px]
-              font-bold
-              uppercase
-              tracking-[0.2em]
-              text-forest
-            "
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-leaf opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-leaf" />
-            </span>
-            Our Clients
-          </div>
-
-          <h2 className="mt-5 text-3xl font-bold tracking-tight text-ink sm:text-4xl lg:text-5xl">
+          <h2 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl lg:text-5xl">
             Trusted by <span className="text-forest">Growing Brands</span>
           </h2>
 

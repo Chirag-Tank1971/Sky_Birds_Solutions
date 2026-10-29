@@ -49,10 +49,7 @@ export default function Courses() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 sm:py-16">
       <div className="max-w-2xl">
-        <span className="text-xs font-bold uppercase tracking-widest text-leaf">
-          Marketplace Learning Catalog
-        </span>
-        <h1 className="mt-2 text-3xl font-bold text-ink sm:text-4xl">
+        <h1 className="text-3xl font-bold text-ink sm:text-4xl">
           E-Commerce Growth Masterclasses
         </h1>
         <p className="mt-3 text-ink/70 text-base leading-relaxed">

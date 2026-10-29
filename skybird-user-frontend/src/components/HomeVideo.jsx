@@ -40,12 +40,8 @@ export default function HomeVideo() {
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
         {/* Heading */}
         <motion.div {...rise()} className="mx-auto max-w-4xl text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-forest/10 bg-forest/5 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-forest">
-            <span className="h-1.5 w-1.5 rounded-full bg-leaf" />
-            Learn With Purpose
-          </span>
 
-          <h2 className="mt-5 text-3xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-4xl lg:text-[46px]">
+          <h2 className="text-3xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-4xl lg:text-[46px]">
             Build Skills with Our <span className="text-leaf">E-Commerce Courses</span>
           </h2>
 

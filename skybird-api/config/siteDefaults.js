@@ -68,9 +68,9 @@ module.exports = {
     },
   },
   support: {
-    email: "support@skybirds.in",
-    mobile: "+91 98765 43210 / +91 80000 12345",
-    location: "SkyBirds E-Commerce Academy, Cyber City, Sector 24, Gurugram, Haryana - 122002",
+    email: "team@skybirdssolution.com",
+    mobile: "+91 70414 92302",
+    location: "SkyBirds E-Commerce solution, 2nd floor, Green Palladia, 218, opp. Raj World Shopping Center, Palanpur, Surat, Gujarat 395009",
     heading: "How Can Our Marketplace Team Help You?",
     description: "Have questions about our video courses, seller onboarding services, or account management? Send us a message and our specialists will respond promptly.",
     responseTime: "Typical response time: Under 4 business hours",
