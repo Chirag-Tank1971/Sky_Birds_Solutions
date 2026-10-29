@@ -42,7 +42,7 @@ export default function OtpInput({ value, onChange, length = 6, shakeKey = 0, au
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0, scale: isActive ? 1.05 : 1 }}
               transition={{ type: "spring", bounce: 0.3, duration: 0.45, delay: i * 0.04 }}
-              className={`relative grid h-12 place-items-center rounded-xl border-2 text-xl font-bold text-ink transition-colors duration-200 sm:h-14 ${
+              className={`relative grid h-11 place-items-center rounded-xl border-2 text-lg font-bold text-ink transition-colors duration-200 sm:h-12 ${
                 isActive
                   ? "border-leaf bg-white shadow-[0_0_0_4px_rgba(110,189,68,0.18)]"
                   : digit

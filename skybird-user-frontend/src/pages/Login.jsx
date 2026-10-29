@@ -337,7 +337,7 @@ export default function Login() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -12 }}
                 onSubmit={handleVerify}
-                className="space-y-5"
+                className="space-y-4"
               >
                 <OtpSentAnimation key={sentCount} />
                 {step === "otp" ? (
@@ -358,8 +358,9 @@ export default function Login() {
                   <p className="mb-1.5 text-sm font-medium text-ink">Enter OTP</p>
                   <OtpInput value={otp} onChange={setOtp} shakeKey={otpErrors} autoFocus />
                 </div>
+                <div className="space-y-1 text-center text-sm">
                 {renderInfo}
-                <div className="text-center text-sm">
+                <div>
                   <span className="text-ink/60">Didn’t receive the OTP? </span>
                   <button
                     type="button"
@@ -373,6 +374,7 @@ export default function Login() {
                       </>
                     ) : "Resend OTP"}
                   </button>
+                </div>
                 </div>
                 {renderError}
                 <button

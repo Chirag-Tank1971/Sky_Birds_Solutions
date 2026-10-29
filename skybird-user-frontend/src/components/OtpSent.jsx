@@ -5,8 +5,8 @@ import { Send, Smartphone } from "lucide-react";
 // and two ripples pulse out. Finite (no endless loops); remount it to replay.
 export function OtpSentAnimation() {
   return (
-    <div className="flex flex-col items-center" role="status">
-      <div className="relative grid h-20 w-20 place-items-center">
+    <div className="flex items-center justify-center gap-3.5" role="status">
+      <div className="relative grid h-14 w-14 shrink-0 place-items-center">
         {[0, 1].map((i) => (
           <motion.span
             key={i}
@@ -19,33 +19,33 @@ export function OtpSentAnimation() {
         ))}
 
         <motion.div
-          className="relative grid h-16 w-16 place-items-center rounded-full bg-mint text-forest"
+          className="relative grid h-12 w-12 place-items-center rounded-full bg-mint text-forest"
           initial={{ scale: 0.6, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", bounce: 0.45, duration: 0.6 }}
         >
-          <Smartphone size={28} strokeWidth={1.8} />
+          <Smartphone size={21} strokeWidth={1.8} />
 
           {/* Message flies in and lands on the phone */}
           <motion.span
             aria-hidden="true"
             className="absolute text-leaf"
-            initial={{ x: -46, y: 26, opacity: 0, rotate: -20, scale: 0.8 }}
-            animate={{ x: [-46, 0], y: [26, 0], opacity: [0, 1, 0], rotate: 0, scale: [0.8, 1, 0.4] }}
+            initial={{ x: -34, y: 18, opacity: 0, rotate: -20, scale: 0.8 }}
+            animate={{ x: [-34, 0], y: [18, 0], opacity: [0, 1, 0], rotate: 0, scale: [0.8, 1, 0.4] }}
             transition={{ duration: 0.75, delay: 0.15, ease: "easeInOut" }}
           >
-            <Send size={16} fill="currentColor" />
+            <Send size={13} fill="currentColor" />
           </motion.span>
 
           {/* Check badge draws itself once the message has landed */}
           <motion.span
             aria-hidden="true"
-            className="absolute -right-1 -top-1 grid h-7 w-7 place-items-center rounded-full bg-leaf text-white shadow-md ring-4 ring-white"
+            className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-leaf text-white shadow-md ring-[3px] ring-white"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", bounce: 0.5, duration: 0.5, delay: 0.75 }}
           >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
               <motion.path
                 d="M5 12.5l4.5 4.5L19 7.5"
                 initial={{ pathLength: 0 }}
@@ -57,8 +57,9 @@ export function OtpSentAnimation() {
         </motion.div>
       </div>
 
+      <div className="text-left">
       <motion.p
-        className="mt-3 text-sm font-semibold text-ink"
+        className="text-sm font-semibold text-ink"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.9, duration: 0.4 }}
@@ -73,6 +74,7 @@ export function OtpSentAnimation() {
       >
         Check your SMS inbox
       </motion.p>
+      </div>
     </div>
   );
 }
