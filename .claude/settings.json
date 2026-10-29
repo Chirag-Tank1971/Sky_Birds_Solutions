@@ -72,7 +72,16 @@
       "Bash(git -C /d/WORK/Sky_Birds_Solutions log --oneline -3)",
       "Bash(timeout 30 node scripts/set-admin-password.js owner@test.com)",
       "Bash(node -e \"const l=require\\('lucide-react'\\);console.log\\(['BriefcaseBusiness','Compass','GraduationCap','Rocket','Store','TrendingUp'].every\\(n=>n in l\\)\\)\")",
-      "Bash(curl -s -m 90 -w \"\\\\nstatus %{http_code}\\\\n\" https://sky-birds-solutions.onrender.com/)"
+      "Bash(curl -s -m 90 -w \"\\\\nstatus %{http_code}\\\\n\" https://sky-birds-solutions.onrender.com/)",
+      "Bash(curl -s -m 90 -o /dev/null -w \"root: %{http_code}\\\\n\" https://sky-birds-solutions.onrender.com/)",
+      "Bash(curl -s -m 60 -D - -o /tmp/b.txt -H \"Origin: https://sky-birds-solutions.vercel.app\" https://sky-birds-solutions.onrender.com/api/courses)",
+      "Read(//tmp/**)",
+      "Bash(sed -i '/{\\\\/\\\\* ================= 6 ================= \\\\*\\\\/}/d' src/pages/Home.jsx)",
+      "Bash(grep -n -B1 -A2 '>SB<\\\\|SB$' pages/Login.jsx)",
+      "Bash(grep -n \"^\\\\s*SB\\\\s*$\" pages/Login.jsx)",
+      "Bash(node -e \"const l=require\\('lucide-react'\\);console.log\\(['LogIn','UserPlus','BookOpen','LifeBuoy','LayoutDashboard','LogOut','ChevronDown','UserRound'].map\\(n=>n+':'+\\(n in l\\)\\).join\\(' '\\)\\)\")",
+      "Bash(sed -i 's|<RollText>Login / Register</RollText>|<RollText>Sign in / Sign up</RollText>|' src/components/Navbar.jsx)",
+      "Bash(sed -i 's|    mobile: \"Login / Register\",|    mobile: \"Sign in / Sign up\",|' src/pages/Login.jsx)"
     ],
     "additionalDirectories": [
       "C:\\Users\\DELL\\AppData\\Local\\Temp\\claude\\d--WORK-Sky-Birds-Solutions\\f887111b-1a5c-418b-9ceb-305f67738077\\scratchpad"

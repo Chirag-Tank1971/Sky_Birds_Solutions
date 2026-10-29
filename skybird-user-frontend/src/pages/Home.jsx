@@ -851,12 +851,13 @@ export default function Home() {
 
                   {/* ================= 5 ================= */}
 
-                  {i === 4 && (
+                  {/* Sections 5 and 6 share this layout. */}
+                  {(i === 4 || i === 5) && (
                     <div className="relative">
                       <div className="mb-7 flex items-end justify-between gap-4">
                         <div>
                           <span className="text-xs font-bold tracking-[.18em] text-leaf">
-                            05
+                            {String(i + 1).padStart(2, "0")}
                           </span>
 
                           <h3 className="mt-2 text-2xl font-black text-ink sm:text-3xl">
@@ -883,7 +884,6 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* ================= 6 ================= */}
 
                   {/* ================= 7 ================= */}
 

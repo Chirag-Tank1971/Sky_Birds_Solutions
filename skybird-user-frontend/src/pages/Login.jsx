@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { useUser } from "../context/UserContext";
 import RollText from "../components/RollText";
 import Shine from "../components/Shine";
+import { CountdownRing, OtpSentAnimation } from "../components/OtpSent";
+import OtpInput from "../components/OtpInput";
 
 // Matches the API, which allows one OTP per number per minute.
 const OTP_RESEND_SECONDS = 60;
@@ -33,6 +35,10 @@ export default function Login() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [resendCountdown, setResendCountdown] = useState(0);
+  // Bumped on every successful send so the "sent" animation replays.
+  const [sentCount, setSentCount] = useState(0);
+  // Bumped on each failed verify to shake the OTP boxes.
+  const [otpErrors, setOtpErrors] = useState(0);
 
   useEffect(() => {
     if (resendCountdown <= 0) return undefined;
@@ -73,6 +79,7 @@ export default function Login() {
     setConfirmPassword("");
     setInfo(res.message || "OTP sent to your mobile number.");
     setResendCountdown(OTP_RESEND_SECONDS);
+      setSentCount((count) => count + 1);
   };
 
   const handleResendOtp = async () => {
@@ -84,6 +91,7 @@ export default function Login() {
     if (res.success) {
       setOtp("");
       setResendCountdown(OTP_RESEND_SECONDS);
+      setSentCount((count) => count + 1);
       setInfo(res.message || "A new OTP has been sent.");
     } else {
       setError(res.message || "Failed to resend OTP. Please try again.");
@@ -100,6 +108,7 @@ export default function Login() {
     const purpose = step === "forgot-otp" ? "reset" : "register";
     const res = await verifyOtp({ mobile, otp, name: name.trim(), purpose });
     if (!res.success) {
+      setOtpErrors((count) => count + 1);
       setError(res.message || "Invalid OTP");
       return;
     }
@@ -149,6 +158,7 @@ export default function Login() {
       setStep("forgot-otp");
       setOtp("");
       setResendCountdown(OTP_RESEND_SECONDS);
+      setSentCount((count) => count + 1);
       setInfo(res.message || "Password reset OTP sent.");
     } else {
       setError(res.message || "Unable to send reset OTP.");
@@ -179,7 +189,7 @@ export default function Login() {
   };
 
   const titles = {
-    mobile: "Login / Register",
+    mobile: "Sign in / Sign up",
     login: "Welcome Back",
     otp: "Verify OTP",
     password: "Create Password",
@@ -225,8 +235,8 @@ export default function Login() {
           className="w-full rounded-3xl border border-forest/10 bg-white p-8 shadow-lg shadow-forest/5"
         >
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-leaf text-xl font-bold text-white">
-              SB
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-[#10251D] p-2 shadow-lg shadow-forest/20">
+              <img src="/assets/logo1.webp" alt="Sky Birds Solution" className="max-h-full max-w-full object-contain" />
             </div>
             <h1 className="text-2xl font-bold text-ink">{titles[step]}</h1>
             <p className="mt-1 text-sm text-ink/60">{descriptions[step]}</p>
@@ -329,6 +339,7 @@ export default function Login() {
                 onSubmit={handleVerify}
                 className="space-y-5"
               >
+                <OtpSentAnimation key={sentCount} />
                 {step === "otp" ? (
                   <label className="block text-sm font-medium text-ink">
                     Your name <span className="text-ink/40">(optional)</span>
@@ -343,21 +354,10 @@ export default function Login() {
                     />
                   </label>
                 ) : null}
-                <label className="block text-sm font-medium text-ink">
-                  Enter OTP
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="6-digit OTP"
-                    className="mt-1.5 w-full rounded-xl border border-forest/20 px-3 py-2.5 text-center text-lg tracking-[0.4em] outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
-                    required
-                    autoFocus
-                  />
-                </label>
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-ink">Enter OTP</p>
+                  <OtpInput value={otp} onChange={setOtp} shakeKey={otpErrors} autoFocus />
+                </div>
                 {renderInfo}
                 <div className="text-center text-sm">
                   <span className="text-ink/60">Didn’t receive the OTP? </span>
@@ -365,9 +365,13 @@ export default function Login() {
                     type="button"
                     onClick={handleResendOtp}
                     disabled={loading || resendCountdown > 0}
-                    className="font-semibold text-forest hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 font-semibold text-forest hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
                   >
-                    {loading ? "Sending…" : resendCountdown > 0 ? `Resend OTP in ${resendCountdown}s` : "Resend OTP"}
+                    {loading ? "Sending…" : resendCountdown > 0 ? (
+                      <>
+                        Resend in <CountdownRing seconds={resendCountdown} total={OTP_RESEND_SECONDS} />
+                      </>
+                    ) : "Resend OTP"}
                   </button>
                 </div>
                 {renderError}

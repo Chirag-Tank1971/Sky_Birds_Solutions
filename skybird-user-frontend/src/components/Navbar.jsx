@@ -3,6 +3,7 @@ import { NavLink, Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useUser } from "../context/UserContext";
 import RollText from "./RollText";
+import AccountMenu from "./AccountMenu";
 
 const links = [
   { to: "/", label: "Home" },
@@ -15,6 +16,7 @@ export default function Navbar() {
   const { user, isAuthenticated, logout } = useUser();
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(null);
+  const [navHover, setNavHover] = useState(null);
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -22,13 +24,6 @@ export default function Navbar() {
     setOpen(false);
     navigate("/");
   };
-
-  const navLinkClass = ({ isActive }) =>
-    `rounded-full px-4 py-2 text-sm font-medium transition-all duration-300 ${
-      isActive
-        ? "bg-white/75 text-forest shadow-sm ring-1 ring-white/80"
-        : "text-ink/80 hover:bg-white/90 hover:text-forest text-white"
-    }`;
 
   return (
     <>
@@ -66,66 +61,51 @@ export default function Navbar() {
               </span>
             </Link>
 
-            {/* Desktop Navigation */}
-            <nav className="hidden items-center gap-1 md:flex">
+            {/* Desktop Navigation: pill track with a gliding hover highlight and active pill */}
+            <nav
+              className="hidden items-center gap-0.5 rounded-full bg-white/[0.06] p-1 ring-1 ring-white/10 md:flex"
+              onMouseLeave={() => setNavHover(null)}
+            >
               {links.map((link) => (
                 <NavLink
                   key={link.to}
                   to={link.to}
                   end={link.to === "/"}
-                  className={navLinkClass}
+                  onMouseEnter={() => setNavHover(link.to)}
+                  className={({ isActive }) =>
+                    `relative rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-200 ${
+                      isActive ? "text-[#10251D]" : "text-white/75 hover:text-white"
+                    }`
+                  }
                 >
-                  <RollText>{link.label}</RollText>
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <motion.span
+                          layoutId="nav-active"
+                          className="absolute inset-0 rounded-full bg-leaf"
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.45 }}
+                        />
+                      )}
+                      {!isActive && navHover === link.to && (
+                        <motion.span
+                          layoutId="nav-hover"
+                          className="absolute inset-0 rounded-full bg-white/10"
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.35 }}
+                        />
+                      )}
+                      <span className="relative">
+                        <RollText>{link.label}</RollText>
+                      </span>
+                    </>
+                  )}
                 </NavLink>
               ))}
-
-              {isAuthenticated && (
-                <NavLink to="/dashboard" className={navLinkClass}>
-                  <RollText>My Dashboard</RollText>
-                </NavLink>
-              )}
             </nav>
 
-            {/* Desktop Actions */}
-            <div className="hidden shrink-0 items-center gap-3 md:flex">
-              {isAuthenticated ? (
-                <>
-                  <div className="max-w-[160px] text-right">
-                    <p className="truncate text-sm font-semibold text-white">
-                      {user?.name || "Learner"}
-                    </p>
-
-                    <p className="truncate text-xs text-white/70">
-                      {user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="
-                      rounded-full border border-forest/20
-                      bg-red-500 cursor-pointer px-4 py-2
-                      text-sm font-semibold text-white
-                      transition hover:bg-red-600
-                    "
-                  >
-                    <RollText>Logout</RollText>
-                  </button>
-                </>
-              ) : (
-                <Link
-                  to="/login"
-                  className="
-                    rounded-full bg-leaf px-5 py-2
-                    text-sm font-bold text-white
-                    shadow-sm transition
-                    hover:bg-forest hover:shadow-md
-                  "
-                >
-                  <RollText>Login</RollText>
-                </Link>
-              )}
+            {/* Desktop account button + small menu */}
+            <div className="hidden shrink-0 md:block">
+              <AccountMenu user={user} isAuthenticated={isAuthenticated} onLogout={handleLogout} />
             </div>
 
             {/* Mobile Hamburger */}
@@ -247,7 +227,7 @@ export default function Navbar() {
                   onClick={() => setOpen(false)}
                   className="m-1 flex items-center justify-center rounded-xl bg-leaf px-4 py-2.5 text-sm font-bold text-[#10251D] transition hover:bg-white"
                 >
-                  <RollText>Login / Register</RollText>
+                  <RollText>Sign in / Sign up</RollText>
                 </Link>
               )}
             </motion.aside>
