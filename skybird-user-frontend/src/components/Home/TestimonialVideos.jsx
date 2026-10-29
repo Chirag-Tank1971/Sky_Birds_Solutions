@@ -147,9 +147,10 @@ function TestimonialCard({ item }) {
   return (
     <article
       ref={cardRef}
-      className="group relative h-[480px] w-[280px] shrink-0 overflow-hidden rounded-[22px] bg-black shadow-xl sm:h-[520px] sm:w-[300px]"
+      className="group relative h-[460px] w-[270px] shrink-0 rounded-[30px] bg-white p-2 shadow-[0_20px_50px_-20px_rgba(16,37,29,0.35)] ring-1 ring-black/5 transition-transform duration-500 hover:-translate-y-2 sm:h-[500px] sm:w-[290px]"
       onContextMenu={(event) => event.preventDefault()}
     >
+      <div className="relative h-full w-full overflow-hidden rounded-[24px] bg-[#10251D]">
       <video
         ref={videoRef}
         poster={item.poster || undefined}
@@ -167,7 +168,7 @@ function TestimonialCard({ item }) {
         onPause={() => setPlaying(false)}
       />
 
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/85" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-[#10251D]/95" />
 
       <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
         <button
@@ -194,9 +195,9 @@ function TestimonialCard({ item }) {
       </button>
 
       <div className="absolute bottom-0 left-0 right-0 z-10 p-5 sm:p-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70 sm:text-xs">
-          Student Testimonial
-        </p>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-leaf/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#10251D]">
+          <Play size={9} fill="currentColor" /> Student story
+        </span>
         <p className="mt-2 text-base font-bold leading-6 text-white sm:text-lg">
           “{item.quote}”
         </p>
@@ -204,6 +205,7 @@ function TestimonialCard({ item }) {
           <p className="text-sm font-bold text-white">{item.name}</p>
           <p className="mt-0.5 text-xs text-white/65">{item.role}</p>
         </div>
+      </div>
       </div>
     </article>
   );
@@ -239,47 +241,49 @@ export default function TestimonialVideos() {
     });
   };
 
+  const arrow =
+    "grid h-12 w-12 place-items-center rounded-full border border-forest/15 bg-white text-forest shadow-sm transition hover:-translate-y-0.5 hover:border-leaf hover:bg-leaf hover:text-white";
+
   return (
-    <section className="overflow-hidden bg-ink py-14 sm:py-20">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl text-center">
-          <span className="inline-flex rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-leaf">
+    <section className="relative overflow-hidden bg-[#f4f8f1] py-16 sm:py-24">
+      {/* Soft dot grid and green glows */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(rgba(46,107,46,0.12)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(70%_60%_at_50%_50%,black,transparent)]" />
+      <div className="pointer-events-none absolute -left-40 top-0 h-96 w-96 rounded-full bg-leaf/15 blur-3xl" />
+      <div className="pointer-events-none absolute -right-40 bottom-0 h-96 w-96 rounded-full bg-mint blur-3xl" />
+
+      <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-[0.8fr_2fr] lg:px-8">
+        {/* Heading and controls */}
+        <div className="text-center lg:text-left">
+          <span className="inline-flex items-center gap-2 rounded-full border border-forest/10 bg-white px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-forest shadow-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-leaf" />
             Student Stories
           </span>
-          <h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">
-            Real Sellers.<span className="text-leaf"> Real Stories.</span>
+          <h2 className="mt-5 text-3xl font-black leading-[1.05] tracking-tight text-ink sm:text-4xl lg:text-5xl">
+            Real Sellers.
+            <span className="block text-leaf">Real Stories.</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/65 sm:text-base">
+          <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-slate-600 sm:text-base lg:mx-0">
             Hear directly from learners and sellers about their experience with
             Sky Birds Solution.
           </p>
+          <div className="mt-8 hidden items-center gap-3 sm:flex sm:justify-center lg:justify-start">
+            <button type="button" onClick={() => scroll("left")} className={arrow} aria-label="Previous testimonials">
+              <ChevronLeft size={20} />
+            </button>
+            <button type="button" onClick={() => scroll("right")} className={arrow} aria-label="Next testimonials">
+              <ChevronRight size={20} />
+            </button>
+            <span className="ml-1 text-xs font-medium text-slate-500">{testimonials.length} stories</span>
+          </div>
         </div>
 
-        <div className="mt-8 hidden justify-end gap-2 sm:flex">
-          <button
-            type="button"
-            onClick={() => scroll("left")}
-            className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/[0.06] text-white transition hover:border-leaf hover:bg-leaf"
-            aria-label="Previous testimonials"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={() => scroll("right")}
-            className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/[0.06] text-white transition hover:border-leaf hover:bg-leaf"
-            aria-label="Next testimonials"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
+        {/* Scrolling row; alternate cards sit lower for a staggered look */}
         <div
           ref={scrollRef}
-          className="mt-6 flex gap-4 overflow-x-auto scroll-smooth pb-5 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mt-4 sm:justify-center sm:overflow-visible"
+          className="-mx-4 flex gap-5 overflow-x-auto scroll-smooth px-4 pb-10 pt-2 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:px-1"
         >
-          {testimonials.map((item) => (
-            <div key={item.id} className="snap-center">
+          {testimonials.map((item, index) => (
+            <div key={item.id} className={`snap-center ${index % 2 ? "lg:mt-10" : ""}`}>
               <TestimonialCard item={item} />
             </div>
           ))}

@@ -73,6 +73,31 @@ const clusterPositions = (side) =>
     }),
   );
 
+// Phone layout: a 2-3-2 flower around the centre hexagon (index order skips the centre).
+const flowerPositions = [
+  { x: STEP_X / 2, y: 0 }, { x: STEP_X * 1.5, y: 0 },
+  { x: 0, y: STEP_Y }, { x: STEP_X * 2, y: STEP_Y },
+  { x: STEP_X / 2, y: STEP_Y * 2 }, { x: STEP_X * 1.5, y: STEP_Y * 2 },
+];
+
+function BrandHex({ logoSize }) {
+  return (
+    <div
+      className="relative grid h-full w-full place-items-center bg-[radial-gradient(circle_at_50%_30%,#2e6b2e,#201d1d_70%)]"
+      style={{ clipPath: HEX }}
+    >
+      <img
+        src="/assets/logo1.webp"
+        alt="Sky Birds Solution"
+        loading="lazy"
+        decoding="async"
+        style={{ width: logoSize, height: logoSize }}
+        className="object-contain"
+      />
+    </div>
+  );
+}
+
 const popIn = {
   hidden: { opacity: 0, scale: 0.6 },
   visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.7 } },
@@ -216,37 +241,46 @@ export default function ClientLogos() {
           </p>
         </motion.div>
 
-        {/* Honeycomb: left cluster, Sky Birds hexagon, right cluster */}
+        {/* Desktop honeycomb: left cluster, Sky Birds hexagon, right cluster */}
         <motion.div
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.2 }}
           variants={{ visible: { transition: { staggerChildren: 0.12 } } }}
-          className="flex flex-col items-center justify-center gap-8 [--w:84px] sm:[--w:104px] lg:flex-row lg:gap-10 lg:[--w:92px] xl:[--w:112px]"
+          className="hidden items-center justify-center gap-10 lg:flex lg:[--w:92px] xl:[--w:112px]"
         >
-          <Cluster side="left" slots={slots.slice(0, 9)} className="order-2 lg:order-1" />
+          <Cluster side="left" slots={slots.slice(0, 9)} />
 
           <motion.div
             variants={popIn}
-            className="relative order-1 h-[calc(var(--w)*2.6*1.1547)] w-[calc(var(--w)*2.6)] shrink-0 lg:order-2"
+            className="relative h-[calc(var(--w)*2.6*1.1547)] w-[calc(var(--w)*2.6)] shrink-0"
           >
             <div className="absolute inset-[12%] rounded-full bg-leaf/40 blur-2xl" />
-            <div
-              className="relative grid h-full w-full place-items-center bg-[radial-gradient(circle_at_50%_30%,#2e6b2e,#201d1d_70%)]"
-              style={{ clipPath: HEX }}
-            >
-              <img
-                src="/assets/logo1.webp"
-                alt="Sky Birds Solution"
-                loading="lazy"
-                decoding="async"
-                className="h-[52%] w-[52%] object-contain"
-              />
-            </div>
+            <BrandHex logoSize="52%" />
           </motion.div>
 
-          {/* Phones show one cluster; it still cycles through every brand. */}
-          <Cluster side="right" slots={slots.slice(9)} className="order-3 hidden lg:block" />
+          <Cluster side="right" slots={slots.slice(9)} />
+        </motion.div>
+
+        {/* Phones and tablets: one compact 7-hexagon flower with Sky Birds in the
+            middle; the 6 logo hexagons still cycle through every brand. */}
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
+          className="relative mx-auto h-[calc(var(--w)*3.01)] w-[calc(var(--w)*3.24)] drop-shadow-[0_8px_14px_rgba(32,29,29,0.06)] [--w:96px] sm:[--w:120px] lg:hidden"
+        >
+          {flowerPositions.map((pos, i) => (
+            <Hex key={i} client={clients[slots[i]]} {...pos} />
+          ))}
+          <motion.div
+            variants={popIn}
+            className="absolute h-[calc(var(--w)*1.1547)] w-[var(--w)]"
+            style={{ left: `calc(var(--w) * ${STEP_X})`, top: `calc(var(--w) * ${STEP_Y})` }}
+          >
+            <BrandHex logoSize="70%" />
+          </motion.div>
         </motion.div>
 
         {/* Bottom Stats */}

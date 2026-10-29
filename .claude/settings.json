@@ -70,7 +70,9 @@
       "Bash(curl -s -o /dev/null -w \"dev server 5173: %{http_code}\\\\n\" http://localhost:5173/)",
       "Bash(grep -n \"{/\\\\* Badge \\\\*/}\\\\|hero.badge\\\\|className=\\\\\"mx-auto mt-6 text-\\\\[2.15rem\\\\]\" pages/Home.jsx)",
       "Bash(git -C /d/WORK/Sky_Birds_Solutions log --oneline -3)",
-      "Bash(timeout 30 node scripts/set-admin-password.js owner@test.com)"
+      "Bash(timeout 30 node scripts/set-admin-password.js owner@test.com)",
+      "Bash(node -e \"const l=require\\('lucide-react'\\);console.log\\(['BriefcaseBusiness','Compass','GraduationCap','Rocket','Store','TrendingUp'].every\\(n=>n in l\\)\\)\")",
+      "Bash(curl -s -m 90 -w \"\\\\nstatus %{http_code}\\\\n\" https://sky-birds-solutions.onrender.com/)"
     ],
     "additionalDirectories": [
       "C:\\Users\\DELL\\AppData\\Local\\Temp\\claude\\d--WORK-Sky-Birds-Solutions\\f887111b-1a5c-418b-9ceb-305f67738077\\scratchpad"

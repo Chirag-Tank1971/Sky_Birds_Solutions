@@ -622,15 +622,7 @@ export default function Home() {
       {/* clients */}
       <ClientLogos />
 
-      <div className="bg-gray-200">
-        <section className="overflow-hidden rounded-3xl max-w-7xl m-auto   py-10">
-          <HomeVideo
-            src="/assets/Mod_1_Part_1_Enhanced.mp4"
-            poster="/assets/video-poster.webp"
-            className="aspect-video w-full"
-          />
-        </section>
-      </div>
+      <HomeVideo />
 
       <TestimonialVideos />
 
