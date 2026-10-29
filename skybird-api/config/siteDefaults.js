@@ -5,7 +5,7 @@ module.exports = {
       title: "Learn E-Commerce.",
       highlight: "Grow",
       titleSuffix: "Your Business.",
-      subtitle: "Master Amazon & E-Commerce with Practical Training",
+      subtitle: "Master Marketplace & E-Commerce with Practical Training",
       description: "Sky Birds Solution helps beginners, aspiring sellers, business owners, and professionals understand online marketplaces through practical, career-focused learning.",
       primaryCta: "Explore Courses",
       secondaryCta: "About Sky Birds",

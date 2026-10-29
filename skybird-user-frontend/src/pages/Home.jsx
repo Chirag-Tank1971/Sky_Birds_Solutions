@@ -325,7 +325,7 @@ export default function Home() {
               className="mx-auto mt-5 max-w-2xl text-base font-bold leading-6 text-forest sm:text-lg"
             >
               {hero.subtitle ||
-                "Master Amazon & E-Commerce with Practical Training"}
+                "Master Marketplace & E-Commerce with Practical Training"}
             </motion.h2>
 
             {/* Description */}
