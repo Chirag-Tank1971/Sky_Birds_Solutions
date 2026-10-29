@@ -1,6 +1,6 @@
 const fs = require("fs");
-const { verifyPlaybackToken, getProtectedFile, setPrivateHeaders, keyPath } = require("../services/playbackService");
-const { videoDir, validateVideoId } = require("../services/videoService");
+const { verifyPlaybackToken, getProtectedFile, setPrivateHeaders, keyPath, streamFile } = require("../services/playbackService");
+const { validateVideoId } = require("../services/videoService");
 
 function authorize(req, videoId) {
   return verifyPlaybackToken(req, videoId);
@@ -63,7 +63,7 @@ exports.getSegment = async (req, res) => {
   }
 
   setPrivateHeaders(res, "video/mp2t");
-  fs.createReadStream(filePath).pipe(res);
+  streamFile(res, filePath);
 };
 
 exports.getKey = async (req, res) => {
@@ -76,5 +76,5 @@ exports.getKey = async (req, res) => {
 
   setPrivateHeaders(res, "application/octet-stream");
   res.set("Content-Length", fs.statSync(filePath).size);
-  fs.createReadStream(filePath).pipe(res);
+  streamFile(res, filePath);
 };

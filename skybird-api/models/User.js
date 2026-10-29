@@ -23,6 +23,12 @@ const userSchema = new mongoose.Schema(
       select: false,
       default: undefined,
     },
+    // Login tokens issued before this moment are rejected (set on password reset).
+    passwordChangedAt: {
+      type: Date,
+      select: false,
+      default: undefined,
+    },
     isBlocked: {
       type: Boolean,
       default: false,

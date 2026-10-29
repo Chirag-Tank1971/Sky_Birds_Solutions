@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchSiteContent } from "../api/site";
+import { useUser } from "../context/UserContext";
+import RollText from "./RollText";
 
 // Inline SVG icons — no external icon library required
 function Icon({ name, size = 20, className = "" }) {
@@ -92,6 +94,7 @@ function Icon({ name, size = 20, className = "" }) {
 }
 
 export default function Footer() {
+  const { isAuthenticated } = useUser();
   const [support, setSupport] = useState({
     email: "support@skybirds.in",
     phone: "",
@@ -157,9 +160,12 @@ export default function Footer() {
 
   const quickLinks = [
     { label: "Home", to: "/" },
+    { label: "Courses", to: "/courses" },
     { label: "About SkyBirds", to: "/about" },
     { label: "Contact Us", to: "/contact" },
-    { label: "Login to Account", to: "/login" },
+    isAuthenticated
+      ? { label: "My Dashboard", to: "/dashboard" }
+      : { label: "Login to Account", to: "/login" },
   ];
 
   return (
@@ -205,7 +211,7 @@ export default function Footer() {
                   rel="noopener noreferrer"
                   aria-label={item.name}
                   title={item.name}
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] transition-all duration-300 hover:-translate-y-1 hover:border-transparent ${item.color}`}
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] transition-colors duration-300 hover:border-transparent ${item.color}`}
                 >
                   <Icon name={item.icon} size={19} />
                 </a>
@@ -215,7 +221,7 @@ export default function Footer() {
 
           {/* Quick links */}
           <div>
-            <h3 className="mb-6 text-sm font-bold uppercase tracking-[0.16em] text-emerald-300">
+            <h3 className="mb-6 text-lg font-semibold text-leaf">
               Quick Links
             </h3>
 
@@ -231,7 +237,7 @@ export default function Footer() {
                       size={14}
                       className="opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100"
                     />
-                    {item.label}
+                    <RollText>{item.label}</RollText>
                   </Link>
                 </li>
               ))}
@@ -240,7 +246,7 @@ export default function Footer() {
 
           {/* Legal */}
           <div>
-            <h3 className="mb-6 text-sm font-bold uppercase tracking-[0.16em] text-emerald-300">
+            <h3 className="mb-6 text-lg font-semibold text-leaf">
               Legal & Policies
             </h3>
 
@@ -250,12 +256,12 @@ export default function Footer() {
                   to="/privacy-policy"
                   className="transition hover:text-emerald-300"
                 >
-                  Privacy Policy
+                  <RollText>Privacy Policy</RollText>
                 </Link>
               </li>
               <li>
                 <Link to="/terms" className="transition hover:text-emerald-300">
-                  Terms & Conditions
+                  <RollText>Terms & Conditions</RollText>
                 </Link>
               </li>
             </ul>
@@ -263,7 +269,7 @@ export default function Footer() {
 
           {/* Contact */}
           <div>
-            <h3 className="mb-6 text-sm font-bold uppercase tracking-[0.16em] text-emerald-300">
+            <h3 className="mb-6 text-lg font-semibold text-leaf">
               Get in Touch
             </h3>
 

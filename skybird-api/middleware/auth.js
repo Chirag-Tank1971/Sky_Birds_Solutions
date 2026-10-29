@@ -2,6 +2,14 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
 
+// True when the token was issued before the user's last password change.
+// JWT iat has one-second precision, so compare in whole seconds.
+function issuedBeforePasswordChange(user, decoded) {
+  if (!user?.passwordChangedAt || !decoded?.iat) return false;
+  return decoded.iat < Math.floor(user.passwordChangedAt.getTime() / 1000);
+}
+exports.issuedBeforePasswordChange = issuedBeforePasswordChange;
+
 // Protect customer routes
 exports.protectCustomer = async (req, res, next) => {
   try {
@@ -30,11 +38,18 @@ exports.protectCustomer = async (req, res, next) => {
       });
     }
 
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(decoded.id).select("+passwordChangedAt");
     if (!user) {
       return res.status(401).json({
         success: false,
         message: "User not found",
+      });
+    }
+
+    if (issuedBeforePasswordChange(user, decoded)) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please log in again.",
       });
     }
 

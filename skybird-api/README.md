@@ -13,7 +13,7 @@ This version keeps the existing Express/MongoDB/JWT/course/purchase architecture
 - Segment filenames are validated to prevent path traversal.
 - Sensitive streaming responses use `Cache-Control: private, no-store`.
 - CORS is restricted to `CLIENT_URL`/`FRONTEND_URL`.
-- The legacy `/api/courses/:id/stream` endpoint now returns 410 and never streams MP4.
+- The legacy `/api/courses/:id/stream` endpoint has been removed.
 
 ## Install / run
 
@@ -27,32 +27,48 @@ npm start
 
 ## Environment
 
+Every variable is listed with comments in `.env.example`.
+
 Required:
 - `MONGODB_URI`
 - `JWT_SECRET` (at least 32 characters; rotate any value included in an older shared archive)
-- `CLIENT_URL` (comma-separated frontend and admin origins)
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` for customer OTP delivery
+- `CLIENT_URL` (comma-separated exact origins of the main site, www and admin panel; any other website is refused)
+- `APITXT_AUTH_KEY` (and optionally `APITXT_COUNTRY_CODE`) for customer OTP delivery via APITxT
 - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` for paid checkout
+- `RAZORPAY_WEBHOOK_SECRET` so payments are granted even if the customer's browser never returns
+- `TRUST_PROXY=true` when deployed behind Render, Nginx or Cloudflare
 
 Optional:
 - `OTP_PEPPER` (recommended separate random secret)
-- `VIDEO_STORAGE_PATH=./private-videos`
-- `PLAYBACK_TOKEN_TTL_SECONDS=300`
-- `MAX_VIDEO_UPLOAD_BYTES=1073741824`
-- `TRUST_PROXY=true` only when deployed behind a trusted reverse proxy
+- `VIDEO_STORAGE_PATH=./private-videos` (must be a persistent disk in production)
+- `PLAYBACK_TOKEN_TTL_SECONDS=1800` (the player renews tokens automatically)
+- `MAX_VIDEO_UPLOAD_BYTES` (capped at 2 GB by the code)
+- `PUBLIC_API_ORIGIN` (public address of the API, used for testimonial video links)
 
-OTP codes are never returned by the API. If Twilio is not configured, OTP sending fails closed with HTTP 503. The in-process rate limiter is suitable only for a single backend instance; use a shared Redis-backed limiter for horizontally scaled deployments.
+OTP codes are never returned by the API. If APITxT is not configured, OTP sending fails closed with HTTP 503. Each number can request one OTP per minute, and each visitor (IP) three per 15 minutes. The in-process rate limiter is suitable only for a single backend instance; use a shared Redis-backed limiter for horizontally scaled deployments.
 
 The seed script is destructive and now refuses to run unless `SEED_ALLOW_DESTRUCTIVE=true` is explicitly set. Use only with a disposable database and a unique `ADMIN_EMAIL`/`ADMIN_PASSWORD` (at least 12 characters). The script never logs the password.
 
 Never put these backend secrets in Vite `VITE_*` variables.
 
+## Payments
+
+1. `POST /api/payment/razorpay/initiate` creates a Razorpay order from the server-side price (and coupon), reserves the coupon use, and stores a `Payment` record. A ₹0 total (free course or 100% coupon) unlocks the course immediately without Razorpay.
+2. After checkout the site calls `POST /api/payment/razorpay/verify`, which checks the signature, captures an `authorized` payment if needed, and grants access.
+3. `POST /api/payment/razorpay/webhook` does the same from Razorpay's side, so access is granted even if the browser never returns. In the Razorpay dashboard add a webhook to `https://<api-host>/api/payment/razorpay/webhook` with the events `order.paid`, `payment.captured` and `payment.authorized`, and put its secret in `RAZORPAY_WEBHOOK_SECRET`.
+
+Granting is idempotent, so verify and the webhook can both arrive. Coupon uses held by unpaid orders are released after 30 minutes. `Payment` records are kept even if a customer is deleted.
+
+## Tests
+
+`npm test` runs the payment, playback and video-processing tests with `node:test`. They need a local MongoDB (`mongodb://127.0.0.1:27017`, or set `TEST_MONGODB_URI`); each run uses and then drops its own throwaway database. Razorpay is replaced by a stub.
+
 ## Upload flow
 
-1. Admin uploads a video to `POST /api/admin/upload/video`.
-2. The server processes it to `private-videos/hls/<videoId>/`.
-3. The response contains only the secure `videoId`.
-4. Add that `videoId` to a course lesson with `POST /api/admin/courses/:id/videos`.
+1. Admin uploads a video to `POST /api/admin/upload/video`. The response comes back immediately with the secure `videoId` (HTTP 202) while conversion runs in the background, one video at a time.
+2. The admin panel polls `GET /api/admin/videos/:videoId/status` (`processing` / `ready` / `failed`). The finished video is in `private-videos/hls/<videoId>/`.
+3. Videos left half-converted by a restart report `failed` and must be uploaded again.
+4. Add that `videoId` to a course lesson with `POST /api/admin/courses/:id/videos` (or save it in the course form). When a lesson is removed or its video replaced, the old files are deleted if no other course or testimonial uses them.
 5. Customers receive only lesson metadata (`id`, `title`, `duration`, `videoId`) from the public course endpoint.
 6. The frontend asks `POST /api/courses/:courseId/videos/:lessonId/playback` for a short-lived token.
 7. The HLS player loads the protected `master.m3u8`.
@@ -85,5 +101,5 @@ Safari/iOS uses native HLS when available. Chrome/Firefox/Edge use HLS.js. The c
 - 401: login/authentication missing or invalid
 - 403: course/lesson authorization failed
 - 404: course, lesson or HLS file not found
-- 410: short-lived playback authorization expired
+- 410: short-lived playback authorization expired (the player renews it and resumes)
 - 500: generic server-side processing/streaming failure

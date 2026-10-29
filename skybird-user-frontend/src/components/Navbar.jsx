@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useUser } from "../context/UserContext";
+import RollText from "./RollText";
 
 const links = [
   { to: "/", label: "Home" },
@@ -35,7 +36,7 @@ export default function Navbar() {
         <div
           className="
             mx-auto max-w-6xl
-            rounded-full
+            rounded-2xl
             border border-white/60
             bg-black/90
             shadow-lg shadow-slate-900/5
@@ -74,13 +75,13 @@ export default function Navbar() {
                   end={link.to === "/"}
                   className={navLinkClass}
                 >
-                  {link.label}
+                  <RollText>{link.label}</RollText>
                 </NavLink>
               ))}
 
               {isAuthenticated && (
                 <NavLink to="/dashboard" className={navLinkClass}>
-                  My Dashboard
+                  <RollText>My Dashboard</RollText>
                 </NavLink>
               )}
             </nav>
@@ -90,11 +91,11 @@ export default function Navbar() {
               {isAuthenticated ? (
                 <>
                   <div className="max-w-[160px] text-right">
-                    <p className="truncate text-sm font-semibold text-ink">
+                    <p className="truncate text-sm font-semibold text-white">
                       {user?.name || "Learner"}
                     </p>
 
-                    <p className="truncate text-xs text-ink/60">
+                    <p className="truncate text-xs text-white/70">
                       {user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}
                     </p>
                   </div>
@@ -106,10 +107,10 @@ export default function Navbar() {
                       rounded-full border border-forest/20
                       bg-red-500 cursor-pointer px-4 py-2
                       text-sm font-semibold text-white
-                      transition hover:bg-white/80
+                      transition hover:bg-red-600
                     "
                   >
-                    Logout
+                    <RollText>Logout</RollText>
                   </button>
                 </>
               ) : (
@@ -122,7 +123,7 @@ export default function Navbar() {
                     hover:bg-forest hover:shadow-md
                   "
                 >
-                  Login
+                  <RollText>Login</RollText>
                 </Link>
               )}
             </div>
@@ -245,7 +246,7 @@ export default function Navbar() {
               </div>
 
               {/* Navigation */}
-              <div className="flex-1 overflow-y-auto px-4 py-6">
+              <div data-lenis-prevent className="flex-1 overflow-y-auto px-4 py-6">
                 <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40">
                   Menu
                 </p>
@@ -368,7 +369,7 @@ export default function Navbar() {
                       hover:bg-forest
                     "
                   >
-                    Login / Register
+                    <RollText>Login / Register</RollText>
                   </Link>
                 </div>
               )}

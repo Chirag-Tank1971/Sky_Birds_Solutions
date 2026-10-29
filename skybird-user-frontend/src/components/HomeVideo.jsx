@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -17,29 +18,6 @@ export default function HomeVideo({
   const videoRef = useRef(null);
   const [isVideoVisible, setIsVideoVisible] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-
-  // Scroll animation
-  useEffect(() => {
-    const section = sectionRef.current;
-
-    if (!section) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          section.classList.add("is-visible");
-          observer.unobserve(section);
-        }
-      },
-      {
-        threshold: 0.15,
-      },
-    );
-
-    observer.observe(section);
-
-    return () => observer.disconnect();
-  }, []);
 
   // Load and play the large video only while its section is near the viewport.
   useEffect(() => {
@@ -83,6 +61,14 @@ export default function HomeVideo({
     }
   };
 
+  // Scroll-triggered entrances (play once, when 15% of the element is visible).
+  const reveal = (x, delay = 0) => ({
+    initial: { opacity: 0, x },
+    whileInView: { opacity: 1, x: 0 },
+    viewport: { once: true, amount: 0.15 },
+    transition: { type: "spring", bounce: 0, duration: 0.9, delay },
+  });
+
   const audiences = [
     "Who want to explore e-commerce",
     "Students interested in digital business",
@@ -106,7 +92,7 @@ export default function HomeVideo({
         {/* =====================================================
       FULL WIDTH HEADING
   ====================================================== */}
-        <div className="content-reveal mx-auto max-w-5xl text-center">
+        <motion.div {...reveal(45, 0.15)} className="mx-auto max-w-5xl text-center">
           {/* Small Label */}
           <div className="mb-4 flex items-center justify-center gap-3">
             <span className="h-px w-8 bg-[#63b5d3]" />
@@ -134,7 +120,7 @@ export default function HomeVideo({
             best e-commerce courses for learners who prefer practical rather
             than theoretical knowledge.
           </p>
-        </div>
+        </motion.div>
 
         {/* =====================================================
       AUDIENCE + VIDEO
@@ -143,7 +129,7 @@ export default function HomeVideo({
           {/* =====================================================
         LEFT — AUDIENCE
     ====================================================== */}
-          <div className="content-reveal">
+          <motion.div {...reveal(45, 0.15)}>
             {/* Highlight Box */}
             <div className="rounded-2xl border border-[#e4eef2] bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-md">
               <div className="flex items-start gap-4">
@@ -167,12 +153,10 @@ export default function HomeVideo({
             {/* Audience Points */}
             <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
               {audiences.map((item, index) => (
-                <div
+                <motion.div
                   key={item}
-                  className="point-item flex items-start gap-3 rounded-xl px-4 py-2 transition duration-300 hover:-translate-y-1 hover:border-[#cce8f2] hover:shadow-md"
-                  style={{
-                    transitionDelay: `${index * 100}ms`,
-                  }}
+                  {...reveal(20, 0.25 + index * 0.1)}
+                  className="flex items-start gap-3 rounded-xl px-4 py-2 transition-[translate,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-[#cce8f2] hover:shadow-md"
                 >
                   <CheckCircle2
                     size={18}
@@ -183,15 +167,15 @@ export default function HomeVideo({
                   <span className="text-sm font-medium leading-5 text-gray-700">
                     {item}
                   </span>
-                </div>
+                </motion.div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* =====================================================
         RIGHT — VIDEO
     ====================================================== */}
-          <div className="video-reveal relative">
+          <motion.div {...reveal(-45)} className="relative">
             {/* Top Floating Badge */}
             <div className="absolute -top-5 left-5 z-20 hidden items-center gap-2 rounded-full border border-white bg-white/95 px-4 py-2 shadow-lg backdrop-blur sm:flex">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e8f7fc]">
@@ -264,60 +248,10 @@ export default function HomeVideo({
                 Practical & Result-Focused
               </p>
             </div> */}
-          </div>
+          </motion.div>
         </div>
       </div>
 
-      {/* =====================================================
-          ANIMATIONS
-      ====================================================== */}
-      <style jsx>{`
-        .video-reveal,
-        .content-reveal {
-          opacity: 0;
-          transition:
-            opacity 0.8s ease,
-            transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-
-        .video-reveal {
-          transform: translateX(-45px);
-        }
-
-        .content-reveal {
-          transform: translateX(45px);
-          transition-delay: 0.15s;
-        }
-
-        .home-video-section.is-visible .video-reveal,
-        .home-video-section.is-visible .content-reveal {
-          opacity: 1;
-          transform: translateX(0);
-        }
-
-        .point-item {
-          opacity: 0;
-          transform: translateX(20px);
-          transition:
-            opacity 0.5s ease,
-            transform 0.5s ease;
-        }
-
-        .home-video-section.is-visible .point-item {
-          opacity: 1;
-          transform: translateX(0);
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .video-reveal,
-          .content-reveal,
-          .point-item {
-            opacity: 1;
-            transform: none;
-            transition: none;
-          }
-        }
-      `}</style>
     </section>
   );
 }

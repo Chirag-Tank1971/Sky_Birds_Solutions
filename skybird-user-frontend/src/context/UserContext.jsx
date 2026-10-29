@@ -12,9 +12,9 @@ import {
   loginWithPassword as apiLoginWithPassword,
   setPassword as apiSetPassword,
   resetPassword as apiResetPassword,
-  purchaseCourseApi,
   getPurchasedCourses,
 } from "../api/auth"
+import { SESSION_EXPIRED_EVENT } from "../api/axios"
 
 const TOKEN_KEY = "skybirds-token"
 const USER_KEY = "skybirds-user"
@@ -34,6 +34,8 @@ export function UserProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
   const [loading, setLoading] = useState(false)
   const [purchasedCourses, setPurchasedCourses] = useState([])
+  // "idle" until the first load finishes, then "loaded" or "error".
+  const [purchasesStatus, setPurchasesStatus] = useState("idle")
 
   const isAuthenticated = Boolean(token && user)
 
@@ -50,6 +52,7 @@ export function UserProvider({ children }) {
   const refreshPurchased = useCallback(async () => {
     if (!token) {
       setPurchasedCourses([])
+      setPurchasesStatus("loaded")
       return []
     }
     try {
@@ -58,11 +61,13 @@ export function UserProvider({ children }) {
         setPurchasedCourses(res.data)
         const ids = res.data.map((course) => String(course.id || course._id || "")).filter(Boolean)
         setUser((prev) => prev ? { ...prev, purchasedCourseIds: ids } : prev)
+        setPurchasesStatus("loaded")
         return res.data
       }
     } catch {
       // Do not clear a previously loaded list when the API is temporarily unavailable.
     }
+    setPurchasesStatus("error")
     return []
   }, [token])
 
@@ -199,6 +204,12 @@ export function UserProvider({ children }) {
     localStorage.removeItem(USER_KEY)
   }, [])
 
+  // The API rejected the saved session (expired or signed out elsewhere).
+  useEffect(() => {
+    window.addEventListener(SESSION_EXPIRED_EVENT, logout)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, logout)
+  }, [logout])
+
   const hasCourse = useCallback((courseId) => {
     if (!user) return false
     const ids = user.purchasedCourseIds || []
@@ -206,26 +217,13 @@ export function UserProvider({ children }) {
     return purchasedCourses.some((course) => String(course.id || course._id) === String(courseId))
   }, [user, purchasedCourses])
 
-  const purchaseCourse = useCallback(async (course) => {
-    if (!user) return { success: false, message: "Please login first" }
-    try {
-      const res = await purchaseCourseApi(course.id)
-      if (res.success) {
-        await refreshPurchased()
-        return { success: true }
-      }
-      return { success: false, message: res.message || "Purchase failed" }
-    } catch (err) {
-      return { success: false, message: err.response?.data?.message || "Purchase failed" }
-    }
-  }, [user, refreshPurchased])
-
   const value = useMemo(() => ({
     user,
     token,
     isAuthenticated,
     loading,
     purchasedCourses,
+    purchasesStatus,
     sendOtp,
     verifyOtp,
     loginWithPassword,
@@ -233,12 +231,11 @@ export function UserProvider({ children }) {
     resetPassword,
     logout,
     hasCourse,
-    purchaseCourse,
     refreshPurchased,
   }), [
-    user, token, isAuthenticated, loading, purchasedCourses, sendOtp, verifyOtp,
+    user, token, isAuthenticated, loading, purchasedCourses, purchasesStatus, sendOtp, verifyOtp,
     loginWithPassword, registerWithPassword, resetPassword, logout, hasCourse,
-    purchaseCourse, refreshPurchased,
+    refreshPurchased,
   ])
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>

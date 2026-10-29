@@ -1,5 +1,9 @@
 export const easeOut = [0.22, 1, 0.36, 1];
 
+// Entrances: short rise on a spring with no bounce. Interactions: quick, slightly springy.
+const settle = { type: "spring", bounce: 0, duration: 1 };
+const snappy = { type: "spring", bounce: 0.2, duration: 0.4 };
+
 export const pageTransition = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
@@ -17,8 +21,8 @@ export const stagger = {
 };
 
 export const fadeUp = {
-  initial: { opacity: 0, y: 18 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.45, ease: easeOut } },
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0, transition: settle },
 };
 
 export const fadeIn = {
@@ -31,23 +35,24 @@ export const scaleIn = {
   animate: {
     opacity: 1,
     scale: 1,
-    transition: { duration: 0.4, ease: easeOut },
+    transition: settle,
   },
 };
 
 export const inView = {
-  initial: { opacity: 0, y: 18 },
+  initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.45, ease: easeOut },
+  transition: settle,
 };
 
 export const hoverLift = {
   whileHover: { y: -4, boxShadow: "0 14px 32px rgba(46, 107, 46, 0.12)" },
   whileTap: { scale: 0.99 },
-  transition: { type: "spring", stiffness: 400, damping: 25 },
+  transition: snappy,
 };
 
 export const tap = {
   whileHover: { scale: 1.03 },
   whileTap: { scale: 0.97 },
+  transition: snappy,
 };

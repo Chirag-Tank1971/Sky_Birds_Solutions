@@ -44,11 +44,6 @@ export async function getProfile() {
   return data
 }
 
-export async function purchaseCourseApi(courseId) {
-  const { data } = await API.post("/customer/purchase", { courseId })
-  return data
-}
-
 export async function getPurchasedCourses() {
   const { data } = await API.get("/customer/purchased")
   return data

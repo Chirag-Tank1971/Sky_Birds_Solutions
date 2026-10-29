@@ -76,7 +76,10 @@ function TestimonialCard({ item }) {
 
     let hls;
     let cancelled = false;
-    const url = item.videoUrl;
+    // Browsers block http:// media on an https:// page, so upgrade the link.
+    const url = window.location.protocol === "https:"
+      ? item.videoUrl.replace(/^http:\/\//i, "https://")
+      : item.videoUrl;
     const start = () => {
       if (cancelled) return;
       video.muted = true;
@@ -237,16 +240,16 @@ export default function TestimonialVideos() {
   };
 
   return (
-    <section className="overflow-hidden bg-white py-14 sm:py-20">
+    <section className="overflow-hidden bg-ink py-14 sm:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
-          <span className="inline-flex rounded-full border border-leaf/20 bg-mint/50 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-forest">
+          <span className="inline-flex rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-leaf">
             Student Stories
           </span>
-          <h2 className="mt-4 text-3xl font-black tracking-tight text-ink sm:text-4xl lg:text-5xl">
+          <h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">
             Real Sellers.<span className="text-leaf"> Real Stories.</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
+          <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/65 sm:text-base">
             Hear directly from learners and sellers about their experience with
             Sky Birds Solution.
           </p>
@@ -256,7 +259,7 @@ export default function TestimonialVideos() {
           <button
             type="button"
             onClick={() => scroll("left")}
-            className="grid h-10 w-10 place-items-center rounded-full border border-gray-200 bg-white text-forest shadow-sm transition hover:border-leaf hover:bg-mint"
+            className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/[0.06] text-white transition hover:border-leaf hover:bg-leaf"
             aria-label="Previous testimonials"
           >
             <ChevronLeft size={18} />
@@ -264,7 +267,7 @@ export default function TestimonialVideos() {
           <button
             type="button"
             onClick={() => scroll("right")}
-            className="grid h-10 w-10 place-items-center rounded-full border border-gray-200 bg-white text-forest shadow-sm transition hover:border-leaf hover:bg-mint"
+            className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/[0.06] text-white transition hover:border-leaf hover:bg-leaf"
             aria-label="Next testimonials"
           >
             <ChevronRight size={18} />

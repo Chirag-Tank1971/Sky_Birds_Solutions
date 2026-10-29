@@ -1,5 +1,6 @@
 const User = require("../models/User");
-const Course = require("../models/Course");
+// Registers the Course model used by populate() below.
+require("../models/Course");
 
 // @desc    Get courses purchased by logged-in customer
 // @route   GET /api/customer/purchased
@@ -19,9 +20,6 @@ exports.getPurchasedCourses = async (req, res) => {
     return res.status(500).json({ success: false, message: "Unable to load purchased courses" });
   }
 };
-
-// Keep the route for compatibility, but never grant free/simulated enrollment.
-exports.purchaseCourse = async (req, res) => res.status(410).json({ success: false, message: "Direct course enrollment is disabled. Complete checkout to unlock this course." });
 
 // @desc    Get customer profile
 // @route   GET /api/customer/profile

@@ -181,10 +181,12 @@ function ClientRow({ clients: rowClients, rowIndex }) {
           "linear-gradient(to right, transparent, black 5%, black 95%, transparent)",
       }}
     >
-      <div
-        className={`client-marquee-track ${
-          isReverse ? "client-marquee-reverse" : ""
-        }`}
+      {/* Endless scroll: two identical groups, so moving by half loops seamlessly. */}
+      <motion.div
+        className="client-marquee-track"
+        initial={{ x: isReverse ? "-50%" : "0%" }}
+        animate={{ x: isReverse ? "0%" : "-50%" }}
+        transition={{ duration: 30, ease: "linear", repeat: Infinity }}
       >
         {[0, 1].map((group) => (
           <div
@@ -201,10 +203,10 @@ function ClientRow({ clients: rowClients, rowIndex }) {
             ))}
           </div>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
-} 
+}
 
 
 

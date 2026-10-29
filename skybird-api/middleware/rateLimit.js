@@ -1,8 +1,15 @@
-const buckets = new Map();
+function clientKey(req) {
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
 
-function rateLimit({ windowMs = 15 * 60 * 1000, max = 100, message = "Too many requests. Please try again later." } = {}) {
+// Each limiter keeps its own counters, keyed by client (IP by default) rather
+// than by request path, so a limit applies to the visitor across every URL it covers.
+function rateLimit({ windowMs = 15 * 60 * 1000, max = 100, message = "Too many requests. Please try again later.", keyGenerator = clientKey } = {}) {
+  const buckets = new Map();
+  let nextSweep = Date.now() + windowMs;
+
   return (req, res, next) => {
-    const key = `${req.ip || req.socket?.remoteAddress || "unknown"}:${req.baseUrl}${req.path}`;
+    const key = keyGenerator(req);
     const now = Date.now();
     let entry = buckets.get(key);
     if (!entry || entry.resetAt <= now) entry = { count: 0, resetAt: now + windowMs };
@@ -15,8 +22,9 @@ function rateLimit({ windowMs = 15 * 60 * 1000, max = 100, message = "Too many r
       res.set("Retry-After", String(Math.max(1, Math.ceil((entry.resetAt - now) / 1000))));
       return res.status(429).json({ success: false, message });
     }
-    // Opportunistically keep the map bounded and remove expired buckets.
-    if (buckets.size > 10000) {
+    // Remove expired buckets at most once per window so the map stays bounded.
+    if (now >= nextSweep) {
+      nextSweep = now + windowMs;
       for (const [bucketKey, value] of buckets) if (value.resetAt <= now) buckets.delete(bucketKey);
     }
     next();

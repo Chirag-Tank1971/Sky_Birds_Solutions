@@ -4,9 +4,12 @@ const { protectAdmin } = require("../middleware/auth");
 const { createPlaybackToken, getProtectedFile } = require("../services/playbackService");
 const { validateVideoId } = require("../services/videoService");
 const { upload, memoryUpload } = require("../middleware/upload");
+const Admin = require("../models/Admin");
+const { getNotifications } = require("../services/notificationService");
 const {
   uploadThumbnail,
   uploadVideo,
+  getVideoProcessingStatus,
   createPlatform,
   updatePlatform,
   deletePlatform,
@@ -40,6 +43,27 @@ router.use(protectAdmin);
 
 router.get("/stats", getStats);
 
+router.get("/notifications", async (req, res) => {
+  try {
+    res.set("Cache-Control", "private, no-store");
+    return res.status(200).json({ success: true, data: await getNotifications(req.admin) });
+  } catch (error) {
+    console.error("Load notifications failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to load notifications" });
+  }
+});
+
+router.post("/notifications/read-all", async (req, res) => {
+  try {
+    const readAt = new Date();
+    await Admin.updateOne({ _id: req.admin._id }, { $set: { notificationsReadAt: readAt } });
+    return res.status(200).json({ success: true, readAt });
+  } catch (error) {
+    console.error("Mark notifications read failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to update notifications" });
+  }
+});
+
 router.get("/site-content", getAdminSiteContent);
 router.put("/site-content", updateSiteContent);
 
@@ -50,6 +74,7 @@ router.delete("/testimonials/:id", deleteTestimonial);
 
 router.post("/upload/thumbnail", memoryUpload.single("thumbnail"), uploadThumbnail);
 router.post("/upload/video", upload.single("video"), uploadVideo);
+router.get("/videos/:videoId/status", getVideoProcessingStatus);
 
 // Short-lived, admin-only authorization for previewing a private HLS upload.
 router.post("/videos/:videoId/preview-token", (req, res) => {

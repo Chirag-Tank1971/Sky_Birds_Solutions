@@ -5,6 +5,8 @@ const User = require("../models/User");
 const Admin = require("../models/Admin");
 const OtpChallenge = require("../models/OtpChallenge");
 
+const OTP_RESEND_INTERVAL_MS = 60 * 1000;
+
 const generateToken = (id, role) => {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
     throw new Error("Authentication is not configured securely");
@@ -138,6 +140,15 @@ exports.sendOtp = async (req, res) => {
     }
     if (purpose === "reset" && !existingUser) {
       return res.status(404).json({ success: false, message: "No account found for this mobile number." });
+    }
+
+    // At most one SMS per number per minute, whatever IP the requests come from.
+    const previous = await OtpChallenge.findOne({ mobile }).select("createdAt");
+    const waitMs = previous?.createdAt ? OTP_RESEND_INTERVAL_MS - (Date.now() - previous.createdAt.getTime()) : 0;
+    if (waitMs > 0) {
+      const seconds = Math.ceil(waitMs / 1000);
+      res.set("Retry-After", String(seconds));
+      return res.status(429).json({ success: false, message: `Please wait ${seconds} seconds before requesting another OTP.`, retryAfter: seconds });
     }
 
     const otp = crypto.randomInt(100000, 1000000).toString();
@@ -322,7 +333,8 @@ exports.resetPassword = async (req, res) => {
     const passwordHash = await require("bcryptjs").hash(password, 12);
     const updated = await User.updateOne(
       { _id: user._id, passwordResetJti: tokenPayload.jti },
-      { $set: { passwordHash }, $unset: { passwordResetJti: 1 } }
+      // passwordChangedAt signs out every session issued before this reset.
+      { $set: { passwordHash, passwordChangedAt: new Date() }, $unset: { passwordResetJti: 1 } }
     );
     if (!updated.modifiedCount) {
       return res.status(400).json({ success: false, message: "Reset token has already been used. Verify your mobile again." });
@@ -342,7 +354,7 @@ exports.adminLogin = async (req, res) => {
       return res.status(400).json({ success: false, message: "Email and password are required" });
     }
     // Never accept the publicly disclosed demo password, even if an old seeded account still uses it.
-    // if (process.env.NODE_ENV === "production" && password === "admin123") return res.status(401).json({ success: false, message: "Invalid credentials" });
+    if (password === "admin123") return res.status(401).json({ success: false, message: "Invalid credentials" });
     const admin = await Admin.findOne({ email });
     if (!admin || !(await admin.comparePassword(password))) {
       return res.status(401).json({ success: false, message: "Invalid credentials" });

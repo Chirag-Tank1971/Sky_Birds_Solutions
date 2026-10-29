@@ -1,5 +1,19 @@
 const Coupon = require("../models/Coupon");
 
+// Checks a coupon's final values. Returns an error message, or "" when valid.
+function couponProblem(coupon) {
+  if (!coupon.code) return "Coupon code is required";
+  if (!["percentage", "fixed"].includes(coupon.discountType)) return "Invalid discount type";
+  if (!Number.isFinite(coupon.discountValue) || coupon.discountValue <= 0) return "Discount value must be greater than 0";
+  if (coupon.discountType === "percentage" && coupon.discountValue > 100) return "Percentage discount cannot exceed 100%";
+  if (!Number.isFinite(coupon.minPurchase) || coupon.minPurchase < 0) return "Minimum purchase cannot be negative";
+  if (coupon.maxDiscount !== null && (!Number.isFinite(coupon.maxDiscount) || coupon.maxDiscount < 0)) return "Maximum discount cannot be negative";
+  if (coupon.usageLimit !== null && (!Number.isInteger(coupon.usageLimit) || coupon.usageLimit < 1)) return "Usage limit must be a whole number of at least 1";
+  if (!Number.isInteger(coupon.perUserLimit) || coupon.perUserLimit < 1) return "Per-user limit must be a whole number of at least 1";
+  if (coupon.startsAt && coupon.expiresAt && new Date(coupon.expiresAt) <= new Date(coupon.startsAt)) return "Expiry date must be after the start date";
+  return "";
+}
+
 
 // ==========================================
 // GET ALL COUPONS
@@ -216,7 +230,7 @@ exports.updateCoupon = async (req, res) => {
 
     if (code !== undefined) {
       coupon.code =
-        code.trim().toUpperCase();
+        String(code || "").trim().toUpperCase();
     }
 
     if (discountType !== undefined) {
@@ -270,6 +284,15 @@ exports.updateCoupon = async (req, res) => {
         status === "paused"
           ? "paused"
           : "active";
+    }
+
+    const problem = couponProblem(coupon);
+    if (problem) {
+      return res.status(400).json({ success: false, message: problem });
+    }
+
+    if (coupon.isModified("code") && (await Coupon.exists({ code: coupon.code, _id: { $ne: coupon._id } }))) {
+      return res.status(409).json({ success: false, message: "Coupon code already exists" });
     }
 
     await coupon.save();

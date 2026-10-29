@@ -1,7 +1,19 @@
 import axios from 'axios';
 
+// Production builds fall back to the live API, like the user site does.
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? 'https://course-api-sp35.onrender.com/api' : 'http://localhost:5000/api');
+
+// Origin of the API server, for files it serves outside /api (e.g. /uploads/...).
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+
+// Absolute URL for a stored image path; full URLs and data URIs are returned unchanged.
+export const assetUrl = (value) =>
+  !value || /^(https?:|data:)/i.test(value) ? value : `${API_ORIGIN}${value.startsWith('/') ? '' : '/'}${value}`;
+
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },

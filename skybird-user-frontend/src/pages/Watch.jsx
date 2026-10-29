@@ -22,7 +22,7 @@ export default function Watch() {
   const { courseId } = useParams()
   const [searchParams] = useSearchParams()
   const videoId = searchParams.get("v")
-  const { hasCourse, isAuthenticated } = useUser()
+  const { hasCourse, isAuthenticated, purchasesStatus } = useUser()
 
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -72,9 +72,14 @@ export default function Watch() {
     )
   }
 
-  if (loading) {
+  // The purchase list saved in the browser can be out of date (bought on another
+  // device, or unlocked later by the payment webhook). Wait for the server's list
+  // before sending an owner to the buy page.
+  const waitingForPurchases = Boolean(course) && !hasCourse(course.id) && purchasesStatus === "idle"
+
+  if (loading || waitingForPurchases) {
     return (
-      <div className="min-h-[70vh] bg-[#f7faf8]">
+      <div className="min-h-[70vh] bg-canvas">
         <div className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center px-4">
           <div className="text-center">
             <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-leaf/20 border-t-leaf" />
@@ -90,7 +95,7 @@ export default function Watch() {
 
   if (error || !course) {
     return (
-      <div className="min-h-[70vh] bg-[#f7faf8] px-4 py-20">
+      <div className="min-h-[70vh] bg-canvas px-4 py-20">
         <div className="mx-auto max-w-lg rounded-3xl border border-red-100 bg-white p-10 text-center shadow-sm">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-red-50 text-red-500">
             <Video size={25} />
@@ -124,18 +129,17 @@ export default function Watch() {
   // The actual HLS URL is issued by the protected playback API.
   let selectedVideo = null
 
-  if (videoId && course.videos?.length) {
+  if (course.videos?.length) {
+    // An unknown or missing lesson id opens the first lesson.
     selectedVideo =
-      course.videos.find((v) => v.id === videoId) || null
-  } else if (course.videos?.length) {
-    selectedVideo = course.videos[0]
+      (videoId && course.videos.find((v) => v.id === videoId)) || course.videos[0]
   }
 
   const title = selectedVideo?.title || course.title
   const secureVideoId = selectedVideo?.videoId || ""
 
   return (
-    <main className="min-h-screen bg-[#f7faf8] max-w-7xl m-auto">
+    <main className="min-h-screen bg-canvas max-w-7xl m-auto">
       {/* Soft Background */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -right-40 top-20 h-96 w-96 rounded-full bg-leaf/5 blur-3xl" />
@@ -274,7 +278,7 @@ export default function Watch() {
             <div className="mt-5 overflow-hidden rounded-2xl border border-forest/10 bg-white shadow-sm">
               <div className="divide-y divide-gray-100">
                 {course.videos.map((v, i) => {
-                  const isActive = videoId === v.id
+                  const isActive = selectedVideo?.id === v.id
 
                   return (
                     <Link

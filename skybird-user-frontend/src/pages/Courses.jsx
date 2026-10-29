@@ -56,7 +56,7 @@ export default function Courses() {
           E-Commerce Growth Masterclasses
         </h1>
         <p className="mt-3 text-ink/70 text-base leading-relaxed">
-          Practical video training designed for Amazon, Meesho, and Flipkart sellers.
+          Practical video training for online marketplace sellers.
           Learn step-by-step strategies for product launch, rank boosting, and ads management.
         </p>
       </div>

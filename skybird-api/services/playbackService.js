@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
+const { pipeline } = require("stream");
 const { videoDir, keyPath, validateVideoId } = require("./videoService");
 
 function createPlaybackToken(payload) {
@@ -58,7 +59,18 @@ function setPrivateHeaders(res, contentType) {
   });
 }
 
+// Stream a file to the response. A read error ends the response instead of
+// crashing the process (an unhandled stream error would stop the whole API).
+function streamFile(res, filePath) {
+  pipeline(fs.createReadStream(filePath), res, (error) => {
+    if (!error) return;
+    if (!res.headersSent) res.status(500).end();
+    else res.destroy();
+  });
+}
+
 module.exports = {
+  streamFile,
   createPlaybackToken,
   verifyPlaybackToken,
   getProtectedFile,

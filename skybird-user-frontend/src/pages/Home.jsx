@@ -14,7 +14,7 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   CheckCircle,
-  ChevronDown,
+  Plus,
 } from "lucide-react";
 
 import CourseCard from "../components/CourseCard";
@@ -24,27 +24,29 @@ import { fetchSiteContent } from "../api/site";
 
 import FAQ from "../components/Faq";
 
-import Hero from "../components/Home/Hero1";
 import HomeVideo from "../components/HomeVideo";
 import TestimonialVideos from "../components/Home/TestimonialVideos";
 import ClientLogos from "../components/ClientLogos";
+import RollText from "../components/RollText";
+import TopLoader from "../components/TopLoader";
 
+// Short rise on a no-bounce spring, so elements settle in rather than fly in.
 const fadeUp = {
-  hidden: { opacity: 0, y: 28 },
+  hidden: { opacity: 0, y: 10 },
 
   visible: {
     opacity: 1,
 
     y: 0,
 
-    transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] },
+    transition: { type: "spring", bounce: 0, duration: 1 },
   },
 };
 
 const stagger = {
   hidden: {},
 
-  visible: { transition: { staggerChildren: 0.12 } },
+  visible: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } },
 };
 
 const contentSections = [
@@ -214,9 +216,10 @@ export default function Home() {
   const [platforms, setPlatforms] = useState([]);
 
   const [featured, setFeatured] = useState([]);
+  // Real totals for the hero stats card (all courses, not just the featured six).
+  const [courseStats, setCourseStats] = useState({ courses: 0, lessons: 0 });
 
   const [loading, setLoading] = useState(true);
-  const [showPreloader, setShowPreloader] = useState(true);
 
   const [openFaq, setOpenFaq] = useState(0);
   const [siteContent, setSiteContent] = useState(null);
@@ -235,7 +238,14 @@ export default function Home() {
 
         if (cancelled) return;
 
-        if (courseRes.success) setFeatured((courseRes.data || []).slice(0, 6));
+        if (courseRes.success) {
+          const allCourses = courseRes.data || [];
+          setFeatured(allCourses.slice(0, 6));
+          setCourseStats({
+            courses: allCourses.length,
+            lessons: allCourses.reduce((sum, course) => sum + (Number(course.lessons) || 0), 0),
+          });
+        }
 
         if (platformRes.success) setPlatforms(platformRes.data || []);
 
@@ -254,13 +264,6 @@ export default function Home() {
     };
   }, []);
 
-  useEffect(() => {
-    if (loading) return;
-    // Keep the branded intro visible briefly, then move the logo toward the navbar.
-    const timer = window.setTimeout(() => setShowPreloader(false), 1000);
-    return () => window.clearTimeout(timer);
-  }, [loading]);
-
   const home = siteContent?.home || {};
   const hero = home.hero || {};
   const sections =
@@ -270,127 +273,62 @@ export default function Home() {
   const dynamicFaqs =
     Array.isArray(home.faqs) && home.faqs.length ? home.faqs : faqs;
 
-  const logoTargetX =
-    typeof window !== "undefined"
-      ? Math.max(16, (window.innerWidth - 1152) / 2 + 20) +
-        18 -
-        window.innerWidth / 2
-      : -140;
-  const logoTargetY =
-    typeof window !== "undefined" ? 42 - window.innerHeight / 2 : -300;
-
   return (
     <div className="overflow-hidden bg-white text-ink">
-      {showPreloader && (
-        <motion.div
-          className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#f8fbf8] via-white to-[#e8f3e7]"
-          initial={{ opacity: 1 }}
-          animate={{ opacity: loading ? 1 : 0 }}
-          transition={{
-            duration: 0.65,
-            delay: loading ? 0 : 0.95,
-            ease: "easeInOut",
-          }}
-          style={{ pointerEvents: loading ? "auto" : "none" }}
-          aria-label="Loading Sky Birds"
-          role="status"
-        >
-          <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#d9ecd6]/70 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-28 -right-20 h-96 w-96 rounded-full bg-[#dce9f7]/70 blur-3xl" />
-          <motion.div
-            className="relative flex flex-col items-center gap-4"
-            initial={{ opacity: 0, scale: 0.78, y: 12 }}
-            animate={
-              loading
-                ? { opacity: 1, scale: 1, x: 0, y: 0 }
-                : { opacity: 1, scale: 0.72, x: logoTargetX, y: logoTargetY }
-            }
-            transition={{
-              duration: loading ? 0.65 : 0.95,
-              ease: [0.22, 1, 0.36, 1],
-            }}
-          >
-            <motion.div
-              className="grid h-20 w-20 place-items-center rounded-3xl border border-white/80 bg-black/90 p-3 shadow-xl shadow-forest/10 sm:h-24 sm:w-24"
-              animate={{ rotate: loading ? [0, -4, 4, 0] : 0 }}
-              transition={{
-                duration: 1.6,
-                repeat: loading ? Infinity : 0,
-                ease: "easeInOut",
-              }}
-            >
-              <img decoding="async" loading="eager"
-                src="/assets/logo1.webp"
-                alt="Sky Birds"
-                className="h-full w-full object-contain"
-              />
-            </motion.div>
-            <motion.div
-              className="text-center"
-              animate={{ opacity: loading ? 1 : 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <p className="text-2xl font-extrabold tracking-tight text-forest">
-                Sky Birds
-              </p>
-              <p className="mt-1 text-xs font-medium tracking-[0.18em] text-slate-500">
-                YOUR LEARNING JOURNEY
-              </p>
-              <div className="mx-auto mt-5 h-1 w-36 overflow-hidden rounded-full bg-forest/10">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-leaf to-forest"
-                  animate={{ x: ["-100%", "0%", "100%"] }}
-                  transition={{
-                    duration: 1.25,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                  style={{ width: "55%" }}
-                />
-              </div>
-            </motion.div>
-          </motion.div>
-        </motion.div>
-      )}
-      {/* <Hero /> */}
+      {/* Page stays visible while data loads; a thin bar shows progress. */}
+      {loading && <TopLoader />}
 
-      <section className="relative isolate overflow-hidden bg-[#f4f8f4]">
-        {/* Background Decorations */}
-        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute -right-32 -top-32 h-80 w-80 rounded-full bg-leaf/15 blur-3xl" />
-          <div className="absolute -bottom-40 -left-32 h-80 w-80 rounded-full bg-[#cfe8d0]/50 blur-3xl" />
-          <div className="absolute right-[35%] top-[20%] h-32 w-32 rounded-full bg-white/70 blur-2xl" />
+
+      <section className="hero-mesh relative isolate overflow-hidden">
+        {/* Slowly rotating decorative rings behind the heading */}
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-24 -z-10 h-[620px] w-[620px] -translate-x-1/2 sm:h-[760px] sm:w-[760px]">
+          <motion.div
+            className="absolute inset-0 rounded-full border border-dashed border-forest/20"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 30, ease: "linear", repeat: Infinity }}
+          />
+          <motion.div
+            className="absolute inset-[12%] rounded-full border border-leaf/25"
+            animate={{ rotate: -360 }}
+            transition={{ duration: 40, ease: "linear", repeat: Infinity }}
+          >
+            <span className="absolute -top-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-leaf" />
+          </motion.div>
         </div>
 
-        <div className="mx-auto grid max-w-7xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.08fr_.92fr] lg:gap-12 lg:px-8 lg:py-16">
-          {/* LEFT CONTENT */}
+        <div className="mx-auto max-w-7xl px-4 pb-14 pt-12 sm:px-6 sm:pt-16 lg:px-8 lg:pb-20 lg:pt-20">
+          {/* CENTRED INTRO */}
           <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.2 }}
             variants={stagger}
-            className="relative z-10"
+            className="relative z-10 mx-auto max-w-4xl text-center"
           >
             {/* Badge */}
-            <motion.div variants={fadeUp}>
-              <span className="inline-flex items-center gap-2 rounded-full border border-leaf/20 bg-white/80 px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-forest shadow-sm backdrop-blur sm:px-4 sm:text-xs">
-                <motion.span
-                  animate={{ scale: [1, 1.4, 1] }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                  className="h-2 w-2 rounded-full bg-leaf"
-                />
-                {hero.badge || "Practical learning. Real-world skills."}
+            <motion.div variants={fadeUp} className="flex justify-center">
+              <span className="inline-flex items-center gap-1 text-xs font-medium sm:text-[13px]">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-leaf">
+                  <motion.span
+                    animate={{ scale: [1, 1.4, 1] }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="h-2 w-2 rounded-full bg-white"
+                  />
+                </span>
+                <span className="rounded-md bg-black/[0.05] px-3 py-1.5 text-ink/70 backdrop-blur">
+                  {hero.badge || "Practical learning. Real-world skills."}
+                </span>
               </span>
             </motion.div>
 
             {/* Heading */}
             <motion.h1
               variants={fadeUp}
-              className="mt-5 max-w-3xl text-[2.35rem] font-black leading-[1.04] tracking-[-0.035em] text-ink sm:text-5xl lg:text-[3.7rem]"
+              className="mx-auto mt-6 text-[2.15rem] font-black leading-[1.02] tracking-[-0.04em] text-ink sm:text-6xl lg:text-[4.5rem]"
             >
               {hero.title || "Learn E-Commerce."}
               <span className="block">
@@ -402,7 +340,7 @@ export default function Home() {
             {/* Sub Heading */}
             <motion.h2
               variants={fadeUp}
-              className="mt-4 max-w-2xl text-base font-bold leading-6 text-forest sm:text-lg"
+              className="mx-auto mt-5 max-w-2xl text-base font-bold leading-6 text-forest sm:text-lg"
             >
               {hero.subtitle ||
                 "Master Amazon & E-Commerce with Practical Training"}
@@ -411,19 +349,19 @@ export default function Home() {
             {/* Description */}
             <motion.p
               variants={fadeUp}
-              className="mt-4 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base sm:leading-7"
+              className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base sm:leading-7"
             >
               {hero.description ||
                 "Sky Birds Solution helps beginners, aspiring sellers, business owners, and professionals understand online marketplaces through practical, career-focused learning."}
             </motion.p>
 
             {/* CTA */}
-            <motion.div variants={fadeUp} className="mt-6 flex flex-wrap gap-3">
+            <motion.div variants={fadeUp} className="mt-8 flex flex-wrap justify-center gap-3">
               <Link
                 to="/courses"
-                className="group inline-flex items-center gap-2 rounded-full bg-leaf px-5 py-3 text-sm font-bold text-white shadow-lg shadow-leaf/20 transition-all duration-300 hover:-translate-y-1 hover:bg-forest hover:shadow-xl"
+                className="group inline-flex items-center gap-2 rounded-full bg-leaf px-6 py-3.5 text-sm font-bold text-white transition-colors duration-300 hover:bg-forest"
               >
-                {hero.primaryCta || "Explore Courses"}
+                <RollText>{hero.primaryCta || "Explore Courses"}</RollText>
                 <ArrowRight
                   size={17}
                   className="transition-transform duration-300 group-hover:translate-x-1"
@@ -432,16 +370,16 @@ export default function Home() {
 
               <Link
                 to="/about"
-                className="inline-flex items-center gap-2 rounded-full border border-forest/20 bg-white/80 px-5 py-3 text-sm font-bold text-forest shadow-sm backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-leaf hover:bg-white"
+                className="inline-flex items-center gap-2 rounded-[10px] bg-black/[0.06] px-6 py-3.5 text-sm font-bold text-ink backdrop-blur transition-colors duration-300 hover:bg-black/[0.1]"
               >
-                {"About Sky Birds Solution"}
+                <RollText>About Sky Birds Solution</RollText>
               </Link>
             </motion.div>
 
             {/* Small Trust Points */}
             <motion.div
               variants={fadeUp}
-              className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-slate-600"
+              className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs font-medium text-slate-600"
             >
               <span className="flex items-center gap-1.5">
                 <CheckCircle size={14} className="text-leaf" />
@@ -463,105 +401,153 @@ export default function Home() {
             </motion.div>
           </motion.div>
 
-          {/* RIGHT VISUAL */}
+          {/* BENTO GRID */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.94, x: 30 }}
-            whileInView={{ opacity: 1, scale: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{
-              duration: 0.8,
-              ease: [0.22, 1, 0.36, 1],
-            }}
-            className="relative mx-auto w-full max-w-[480px]"
+            variants={stagger}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.1 }}
+            className="mt-12 grid gap-4 sm:grid-cols-2 lg:mt-16 lg:grid-cols-12 lg:grid-rows-[230px_230px]"
           >
-            {/* Glow */}
-            <div className="absolute -inset-5 rounded-[2rem] bg-leaf/10 blur-2xl" />
-
-            {/* Main Image Card */}
+            {/* Main photo */}
             <motion.div
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.3 }}
-              className="relative overflow-hidden rounded-[1.75rem] border-[6px] border-white bg-white shadow-2xl"
+              variants={fadeUp}
+              className="relative min-h-[340px] overflow-hidden rounded-[28px] bg-forest sm:col-span-2 lg:col-span-5 lg:row-span-2 lg:min-h-0"
             >
-              <img decoding="async"
+              <img
+                decoding="async"
                 src={hero.imageUrl || "/assets/owner.webp"}
                 alt="Small business owner managing an online business"
-                className="aspect-[1/0.95] w-full object-cover"
+                className="absolute inset-0 h-full w-full object-cover"
                 loading="lazy"
               />
-
-              {/* Image Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-forest/80 via-forest/10 to-transparent" />
-
-              {/* Image Text */}
-              <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6">
+              <div className="absolute inset-0 bg-gradient-to-t from-forest/85 via-forest/10 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-6">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/80 sm:text-xs">
                   {hero.imageEyebrow || "Your learning journey"}
                 </p>
-
-                <h3 className="mt-1 text-xl font-extrabold text-white sm:text-2xl">
+                <h3 className="mt-1 text-2xl font-extrabold text-white">
                   {hero.imageTitle || "From Learning to Doing."}
                 </h3>
-
-                <p className="mt-1.5 max-w-sm text-xs leading-5 text-white/80 sm:text-sm">
+                <p className="mt-1.5 max-w-sm text-sm leading-5 text-white/80">
                   {hero.imageDescription ||
                     "Build practical knowledge for today's online marketplace."}
                 </p>
               </div>
             </motion.div>
 
-            {/* Floating Learning Card */}
+            {/* Real course stats */}
             <motion.div
-              animate={{
-                y: [0, -8, 0],
-                rotate: [0, 0.5, 0],
-              }}
-              transition={{
-                duration: 4,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-              className="absolute -left-3 top-6 hidden rounded-2xl border border-white/80 bg-white/95 p-3 shadow-xl backdrop-blur sm:block lg:-left-8"
+              variants={fadeUp}
+              className="flex flex-col justify-between rounded-[28px] border border-black/[0.08] bg-white/85 p-6 backdrop-blur lg:col-span-4"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-4xl font-black tracking-tight text-ink">
+                    {loading ? (
+                      <span className="inline-block h-9 w-14 animate-pulse rounded-lg bg-black/[0.07] align-middle" aria-label="Loading" />
+                    ) : (
+                      courseStats.courses || "New"
+                    )}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {loading
+                      ? <span className="inline-block h-4 w-40 animate-pulse rounded bg-black/[0.06] align-middle" />
+                      : courseStats.courses === 1
+                      ? "Practical video course"
+                      : courseStats.courses > 1
+                        ? "Practical video courses"
+                        : "Courses coming soon"}
+                  </p>
+                </div>
+                {/* Overlapping course thumbnails */}
+                <div className="flex -space-x-3">
+                  {featured
+                    .filter((course) => course.thumbnail)
+                    .slice(0, 3)
+                    .map((course) => (
+                      <img
+                        key={course.id || course._id}
+                        src={course.thumbnail}
+                        alt=""
+                        loading="lazy"
+                        className="h-12 w-12 rounded-full border-2 border-white object-cover shadow-sm"
+                      />
+                    ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-black/[0.06] pt-4 text-sm text-slate-600">
+                {courseStats.lessons > 0 && (
+                  <span className="flex items-center gap-2">
+                    <Laptop size={16} className="text-leaf" />
+                    <strong className="font-bold text-ink">{courseStats.lessons}</strong> video lessons
+                  </span>
+                )}
+                {platforms.length > 0 && (
+                  <span className="flex items-center gap-2">
+                    <Store size={16} className="text-leaf" />
+                    <strong className="font-bold text-ink">{platforms.length}</strong>{" "}
+                    {platforms.length === 1 ? "marketplace" : "marketplaces"}
+                  </span>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Learn at your pace + weekly bars */}
+            <motion.div
+              variants={fadeUp}
+              className="flex flex-col justify-between rounded-[28px] border border-black/[0.08] bg-white/85 p-6 backdrop-blur lg:col-span-3"
             >
               <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f4e8] text-forest">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-mint text-forest">
                   <BookOpen size={19} />
                 </div>
-
                 <div>
-                  <p className="text-xs font-bold text-ink">
+                  <p className="text-sm font-bold text-ink">
                     {hero.floatOneTitle || "Learn at your pace"}
                   </p>
-                  <p className="mt-0.5 text-[10px] text-slate-500">
+                  <p className="mt-0.5 text-xs text-slate-500">
                     {hero.floatOneText || "Flexible online learning"}
                   </p>
                 </div>
               </div>
+              <div aria-hidden="true" className="mt-4 flex h-20 items-end gap-1.5">
+                {[45, 70, 55, 90, 65, 80, 100].map((height, index) => (
+                  <motion.span
+                    key={index}
+                    initial={{ scaleY: 0 }}
+                    whileInView={{ scaleY: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ type: "spring", bounce: 0, duration: 1, delay: 0.3 + index * 0.06 }}
+                    style={{ height: `${height}%`, transformOrigin: "bottom" }}
+                    className={`flex-1 rounded-full ${index === 6 ? "bg-leaf" : "bg-mint"}`}
+                  />
+                ))}
+              </div>
             </motion.div>
 
-            {/* Floating Course Card */}
+            {/* Pill-shaped photo */}
             <motion.div
-              animate={{
-                y: [0, 7, 0],
-              }}
-              transition={{
-                duration: 3.5,
-                repeat: Infinity,
-                ease: "easeInOut",
-                delay: 0.5,
-              }}
-              className="absolute -bottom-4 -right-2 hidden rounded-2xl border border-white/80 bg-white/95 px-4 py-3 shadow-xl backdrop-blur sm:block lg:-right-7"
+              variants={fadeUp}
+              className="relative min-h-[220px] overflow-hidden rounded-full bg-forest sm:col-span-2 lg:col-span-7 lg:min-h-0"
             >
-              <div className="flex items-center gap-3">
-                <div className="grid h-9 w-9 place-items-center rounded-full bg-leaf text-white">
-                  <TrendingUp size={17} />
+              <img
+                decoding="async"
+                src="/assets/img1.webp"
+                alt="Learners working on e-commerce marketing together"
+                loading="lazy"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-forest/85 via-forest/40 to-transparent" />
+              <div className="absolute inset-y-0 left-0 flex items-center gap-4 pl-10 sm:pl-14">
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-leaf text-white">
+                  <TrendingUp size={21} />
                 </div>
-
                 <div>
-                  <p className="text-xs font-bold text-ink">
+                  <p className="text-xl font-extrabold text-white sm:text-2xl">
                     {hero.floatTwoTitle || "E-Commerce Skills"}
                   </p>
-                  <p className="mt-0.5 text-[10px] text-slate-500">
+                  <p className="mt-1 text-sm text-white/80">
                     {hero.floatTwoText || "Learn • Apply • Grow"}
                   </p>
                 </div>
@@ -598,14 +584,34 @@ export default function Home() {
             to="/courses"
             className="inline-flex items-center gap-2 text-sm font-bold text-forest hover:text-leaf"
           >
-            {home.featured?.buttonLabel || "See all courses"}{" "}
+            <RollText>{home.featured?.buttonLabel || "See all courses"}</RollText>
             <ArrowRight size={16} />
           </Link>
         </motion.div>
 
         {loading && featured.length === 0 ? (
-          <div className="flex justify-center py-10">
-            <div className="h-9 w-9 animate-spin rounded-full border-3 border-leaf border-t-transparent" />
+          <div
+            className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+            aria-label="Loading courses"
+          >
+            {[0, 1, 2].map((key) => (
+              <div
+                key={key}
+                className="animate-pulse rounded-2xl border border-black/[0.06] bg-white p-4"
+              >
+                <div className="h-56 rounded-xl bg-black/[0.06]" />
+                <div className="mt-4 flex gap-1.5">
+                  <div className="h-6 w-20 rounded-full bg-black/[0.06]" />
+                  <div className="h-6 w-20 rounded-md bg-black/[0.06]" />
+                </div>
+                <div className="mt-4 h-5 w-3/4 rounded bg-black/[0.08]" />
+                <div className="mt-4 space-y-2 border-l border-black/10 pl-4">
+                  <div className="h-4 w-1/3 rounded bg-black/[0.05]" />
+                  <div className="h-4 w-1/2 rounded bg-black/[0.05]" />
+                </div>
+                <div className="mt-6 h-11 rounded-full bg-black/[0.06]" />
+              </div>
+            ))}
           </div>
         ) : featured.length === 0 ? (
           <p className="py-8 text-center text-slate-600">
@@ -623,8 +629,6 @@ export default function Home() {
               <motion.div
                 key={course.id || course._id}
                 variants={fadeUp}
-                whileHover={{ y: -6 }}
-                transition={{ type: "spring", stiffness: 280, damping: 22 }}
               >
                 <CourseCard course={course} />
               </motion.div>
@@ -997,7 +1001,7 @@ export default function Home() {
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.65 }}
-          className="overflow-hidden rounded-3xl"
+          className="overflow-hidden rounded-[50%]"
         >
           <img decoding="async"
             src="/assets/img2.webp"
@@ -1054,9 +1058,9 @@ export default function Home() {
           <motion.div variants={fadeUp} className="mt-7">
             <Link
               to="/courses"
-              className="inline-flex items-center gap-2 rounded-full bg-forest px-6 py-3.5 text-sm font-bold text-white transition hover:-translate-y-1 hover:bg-leaf"
+              className="inline-flex items-center gap-2 rounded-full bg-forest px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-leaf"
             >
-              {home.learning?.buttonLabel || "Find your course"}{" "}
+              <RollText>{home.learning?.buttonLabel || "Find your course"}</RollText>
               <ArrowRight size={17} />
             </Link>
           </motion.div>
@@ -1094,20 +1098,32 @@ export default function Home() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.12 }}
                 transition={{ delay: i * 0.05 }}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                className={`overflow-hidden rounded-xl border bg-black/[0.035] transition-colors duration-300 ${
+                  openFaq === i ? "border-leaf" : "border-transparent"
+                }`}
               >
                 <button
                   type="button"
                   aria-expanded={openFaq === i}
                   onClick={() => setOpenFaq(openFaq === i ? -1 : i)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left sm:px-6"
+                  className="group flex w-full items-center gap-4 px-5 py-5 text-left sm:px-6"
                 >
-                  <span className="font-bold text-ink">{faq.q}</span>
+                  {/* "+" turns into "×" when open */}
+                  <span
+                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-full bg-leaf text-white transition-transform duration-300 ease-out ${
+                      openFaq === i ? "rotate-[135deg]" : ""
+                    }`}
+                  >
+                    <Plus size={15} strokeWidth={2.5} />
+                  </span>
 
-                  <ChevronDown
-                    size={19}
-                    className={`shrink-0 text-leaf transition-transform ${openFaq === i ? "rotate-180" : ""}`}
-                  />
+                  <span
+                    className={`font-bold transition-colors duration-300 group-hover:text-forest ${
+                      openFaq === i ? "text-forest" : "text-ink"
+                    }`}
+                  >
+                    {faq.q}
+                  </span>
                 </button>
 
                 <motion.div
@@ -1120,7 +1136,7 @@ export default function Home() {
                   transition={{ type: "spring", stiffness: 280, damping: 22 }}
                   className="overflow-hidden"
                 >
-                  <p className="px-5 pb-5 text-sm leading-7 text-slate-700 sm:px-6">
+                  <p className="px-5 pb-5 pl-[3.75rem] text-sm leading-7 text-slate-700 sm:pl-16 sm:pr-6">
                     {faq.a}
                   </p>
                 </motion.div>
@@ -1132,55 +1148,74 @@ export default function Home() {
 
       <motion.section
         className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8"
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.6 }}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.15 }}
+        variants={stagger}
       >
-        <div className="relative overflow-hidden rounded-[2rem] bg-forest px-6 py-16 text-center shadow-xl sm:px-12 sm:py-20">
-          <div className="pointer-events-none absolute -bottom-24 left-1/2 h-72 w-[80%] -translate-x-1/2 rounded-full bg-leaf/30 blur-3xl" />
+        <div className="grid items-center gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+          {/* Oval photo */}
+          <motion.div
+            variants={fadeUp}
+            className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-[50%] bg-mint lg:max-w-none"
+          >
+            <img
+              decoding="async"
+              src="/assets/owner1.webp"
+              alt="Sky Birds Solution founder"
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          </motion.div>
 
-          <div className="relative z-10">
-            <p className="text-xs font-bold uppercase tracking-[.2em] text-white/85">
-              {home.cta?.eyebrow || "Your next chapter starts here"}
-            </p>
+          {/* Solid green block */}
+          <motion.div
+            variants={fadeUp}
+            className="relative overflow-hidden rounded-[28px] bg-forest px-6 py-12 sm:px-12 sm:py-14"
+          >
+            <div className="pointer-events-none absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-leaf/30 blur-3xl" />
 
-            <h2 className="mx-auto mt-4 max-w-4xl text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl">
-              {home.cta?.title ||
-                "Start your E-Commerce Learning Journey Today"}
-            </h2>
+            <div className="relative z-10">
+              <p className="text-xs font-bold uppercase tracking-[.2em] text-white/85">
+                {home.cta?.eyebrow || "Your next chapter starts here"}
+              </p>
 
-            <p className="mx-auto mt-5 max-w-3xl text-base leading-8 text-white/90">
-              {home.cta?.paragraph1 ||
-                "The world of online business continues to create opportunities for people who are ready to develop the right skills. The right education can give you a stronger starting point irrespective of whether your goal is to become an Amazon seller, understand market sales, launch an online business or build a career in e-commerce."}
-            </p>
+              <h2 className="mt-4 text-4xl font-black leading-[1.02] tracking-[-0.04em] text-white sm:text-5xl lg:text-[3.25rem]">
+                {home.cta?.title ||
+                  "Start your E-Commerce Learning Journey Today"}
+              </h2>
 
-            <p className="mx-auto mt-4 max-w-3xl text-base leading-8 text-white/90">
-              Explore our e-commerce classes, discover our Amazon training
-              programs, and take the next step towards building your digital
-              business knowledge with Sky Words Solutions.
-            </p>
+              <p className="mt-6 max-w-2xl text-base leading-7 text-white/90">
+                {home.cta?.paragraph1 ||
+                  "The world of online business continues to create opportunities for people who are ready to develop the right skills. The right education can give you a stronger starting point irrespective of whether your goal is to become an Amazon seller, understand market sales, launch an online business or build a career in e-commerce."}
+              </p>
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <Link
-                to="/courses"
-                className="rounded-full bg-white px-7 py-3.5 text-sm font-bold text-forest shadow-lg transition hover:scale-105 hover:bg-leaf hover:text-white"
-              >
-                {hero.primaryCta || "Explore Courses"}
-              </Link>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-white/90">
+                {home.cta?.paragraph2 ||
+                  "Explore our e-commerce classes, discover our Amazon training programs, and take the next step towards building your digital business knowledge with Sky Birds Solution."}
+              </p>
 
-              <Link
-                to="/contact"
-                className="group inline-flex items-center gap-2 text-sm font-semibold text-white/90 transition hover:text-white"
-              >
-                {home.cta?.secondaryLabel || "Contact Us"}{" "}
-                <ArrowRight
-                  size={16}
-                  className="transition-transform group-hover:translate-x-1"
-                />
-              </Link>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link
+                  to="/courses"
+                  className="rounded-full bg-white px-7 py-3.5 text-sm font-bold text-forest transition-colors hover:bg-leaf hover:text-white"
+                >
+                  <RollText>{hero.primaryCta || "Explore Courses"}</RollText>
+                </Link>
+
+                <Link
+                  to="/contact"
+                  className="group inline-flex items-center gap-2 rounded-[10px] bg-ink px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-black"
+                >
+                  <RollText>{home.cta?.secondaryLabel || "Contact Us"}</RollText>
+                  <ArrowRight
+                    size={16}
+                    className="transition-transform group-hover:translate-x-1"
+                  />
+                </Link>
+              </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </motion.section>
     </div>

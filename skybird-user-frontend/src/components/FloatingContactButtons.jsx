@@ -30,7 +30,7 @@ export default function FloatingContactButtons() {
     : "/contact";
 
   return (
-    <div className="fixed bottom-5 right-6 z-[1000] flex flex-row items-center gap-2 sm:bottom-7 sm:right-6">
+    <div className="fixed bottom-5 right-6 z-[45] flex flex-row items-center gap-2 sm:bottom-7 sm:right-6">
       <motion.a
         href="https://t.me/sbsecomlearninghub"
         target={TELEGRAM_USERNAME ? "_blank" : undefined}

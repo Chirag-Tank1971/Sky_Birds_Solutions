@@ -2,9 +2,17 @@ const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const User = require("../models/User");
 const Course = require("../models/Course");
+const Payment = require("../models/Payment");
 const { validateCoupon } = require("../services/couponService");
-const Coupon = require("../models/Coupon");
-const CouponUsage = require("../models/CouponUsage");
+const {
+  reserveCoupon,
+  undoCouponReservation,
+  releaseReservation,
+  readOrderNotes,
+  grantPurchase,
+} = require("../services/purchaseService");
+
+let razorpayFactory = () => new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET });
 
 const getRazorpay = () => {
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -12,24 +20,65 @@ const getRazorpay = () => {
     error.statusCode = 503;
     throw error;
   }
-  return new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET });
+  return razorpayFactory();
+};
+
+// Tests replace the Razorpay client with a stub.
+exports._setRazorpayFactory = (factory) => {
+  razorpayFactory = factory;
 };
 
 const getCoursePrice = (course) => {
-  const price = Number(course.salePrice ?? course.price);
+  const price = Number(course.price);
 
-  if (!Number.isFinite(price) || price <= 0) {
+  if (!Number.isFinite(price) || price < 0) {
     throw new Error("Invalid course price");
   }
 
   return price;
 };
 
+const findActiveCourse = async (courseId) => {
+  const id = String(courseId || "").slice(0, 120);
+  if (!id) return null;
+  const course =
+    (await Course.findOne({ id, isActive: true })) ||
+    (/^[a-f\d]{24}$/i.test(id) ? await Course.findById(id) : null);
+  return course && course.isActive !== false ? course : null;
+};
+
+const hmacHex = (secret, data) => crypto.createHmac("sha256", secret).update(data).digest("hex");
+
+const signatureMatches = (expectedHex, receivedHex) => {
+  const received = Buffer.from(String(receivedHex || ""), "hex");
+  const expected = Buffer.from(expectedHex, "hex");
+  return received.length === expected.length && crypto.timingSafeEqual(received, expected);
+};
+
+const sendError = (res, error, fallback) => {
+  const status = error.statusCode === 503 || error.statusCode === 400 ? error.statusCode : 500;
+  return res.status(status).json({ success: false, message: status === 500 ? fallback : error.message });
+};
+
+// Bring a payment to "captured". Payments stay "authorized" when Razorpay
+// auto-capture is off or delayed; capture them here instead of refusing access.
+const ensureCaptured = async (razorpay, payment) => {
+  if (payment.status === "captured") return payment;
+  if (payment.status !== "authorized") return payment;
+  try {
+    return await razorpay.payments.capture(payment.id, payment.amount, payment.currency);
+  } catch (error) {
+    // Another request (checkout callback or webhook) may have captured it first.
+    const latest = await razorpay.payments.fetch(payment.id);
+    if (latest.status === "captured") return latest;
+    throw error;
+  }
+};
+
 // POST /api/payment/razorpay/initiate
 exports.initiateRazorpayPayment = async (req, res) => {
   try {
-    const { courseId } = req.body;
-    const razorpay = getRazorpay();
+    const courseId = String(req.body?.courseId || "");
 
     if (!courseId) {
       return res.status(400).json({
@@ -38,11 +87,9 @@ exports.initiateRazorpayPayment = async (req, res) => {
       });
     }
 
-    const course =
-      (await Course.findOne({ id: courseId, isActive: true })) ||
-      (await Course.findById(courseId).catch(() => null));
+    const course = await findActiveCourse(courseId);
 
-    if (!course || course.isActive === false) {
+    if (!course) {
       return res.status(404).json({
         success: false,
         message: "Course not found or inactive",
@@ -73,10 +120,11 @@ exports.initiateRazorpayPayment = async (req, res) => {
     const originalAmount = getCoursePrice(course);
     let finalAmount = originalAmount;
     let couponResult = null;
+    const couponCode = typeof req.body.couponCode === "string" ? req.body.couponCode.trim() : "";
 
-    if (req.body.couponCode?.trim()) {
+    if (couponCode && originalAmount > 0) {
       couponResult = await validateCoupon({
-        code: req.body.couponCode.trim().toUpperCase(),
+        code: couponCode.toUpperCase(),
         userId: user._id,
         amount: originalAmount,
       });
@@ -91,7 +139,7 @@ exports.initiateRazorpayPayment = async (req, res) => {
       finalAmount = Number(couponResult.finalAmount);
     }
 
-    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+    if (!Number.isFinite(finalAmount) || finalAmount < 0) {
       return res.status(400).json({
         success: false,
         message: "Invalid payable amount",
@@ -99,21 +147,76 @@ exports.initiateRazorpayPayment = async (req, res) => {
     }
 
     const amount = Math.round(finalAmount * 100);
+    if (amount > 0 && amount < 100) {
+      return res.status(400).json({
+        success: false,
+        message: "The amount to pay must be at least ₹1",
+      });
+    }
 
-    const order = await razorpay.orders.create({
+    const couponId = couponResult?.coupon?._id || null;
+    const paymentFields = {
+      user: user._id,
+      userMobile: user.mobile || "",
+      course: course._id,
+      courseTitle: course.title,
       amount,
       currency: "INR",
-      receipt: `course_${String(course._id).slice(-10)}_${Date.now()}`,
-      notes: {
-        userId: String(user._id),
-        courseId: String(course._id),
-        couponCode: couponResult?.code || "",
-        couponId: couponResult?.coupon?._id ? String(couponResult.coupon._id) : "",
-        originalAmount: String(originalAmount),
-        discountAmount: String(couponResult?.discountAmount || 0),
-        finalAmount: String(finalAmount),
-      },
-    });
+      originalAmount,
+      discountAmount: Number(couponResult?.discountAmount || 0),
+      finalAmount,
+      couponCode: couponResult?.code || "",
+      coupon: couponId,
+    };
+
+    // A retried checkout gives back the coupon use held by this customer's earlier unpaid orders.
+    if (couponId) {
+      const earlier = await Payment.find({ user: user._id, course: course._id, status: "created", couponState: "reserved" }).select("_id coupon");
+      for (const payment of earlier) await releaseReservation(payment);
+      if (!(await reserveCoupon(couponId))) {
+        return res.status(400).json({ success: false, message: "This coupon usage limit has been reached" });
+      }
+    }
+
+    // Free course, or a coupon that covers the full price: no payment needed.
+    if (amount === 0) {
+      const orderId = `free_${crypto.randomUUID()}`;
+      try {
+        await Payment.create({ ...paymentFields, orderId, provider: "free", couponState: couponId ? "reserved" : "none" });
+        await grantPurchase({ orderId, provider: "free", via: "free" });
+      } catch (error) {
+        if (couponId) await undoCouponReservation(couponId);
+        throw error;
+      }
+      return res.status(200).json({
+        success: true,
+        message: "Course unlocked",
+        data: { free: true },
+      });
+    }
+
+    let order;
+    try {
+      const razorpay = getRazorpay();
+      order = await razorpay.orders.create({
+        amount,
+        currency: "INR",
+        receipt: `course_${String(course._id).slice(-10)}_${Date.now()}`,
+        notes: {
+          userId: String(user._id),
+          courseId: String(course._id),
+          couponCode: couponResult?.code || "",
+          couponId: couponId ? String(couponId) : "",
+          originalAmount: String(originalAmount),
+          discountAmount: String(couponResult?.discountAmount || 0),
+          finalAmount: String(finalAmount),
+        },
+      });
+      await Payment.create({ ...paymentFields, orderId: order.id, provider: "razorpay", couponState: couponId ? "reserved" : "none" });
+    } catch (error) {
+      if (couponId) await undoCouponReservation(couponId);
+      throw error;
+    }
 
     return res.status(200).json({
       success: true,
@@ -128,33 +231,28 @@ exports.initiateRazorpayPayment = async (req, res) => {
     });
   } catch (error) {
     console.error("Razorpay order creation error:", error);
-
-    return res.status(error.statusCode === 503 ? 503 : 500).json({
-      success: false,
-      message: error.statusCode === 503 ? error.message : "Unable to create payment order",
-    });
+    return sendError(res, error, "Unable to create payment order");
   }
 };
 
 // POST /api/payment/razorpay/verify
-
 exports.verifyRazorpayPayment = async (req, res) => {
   try {
     const razorpay = getRazorpay();
     const {
-      courseId,
       couponCode,
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
     } = req.body;
+    const courseId = String(req.body.courseId || "");
 
     // 1. Validate required fields
     if (
       !courseId ||
-      !razorpay_order_id ||
-      !razorpay_payment_id ||
-      !razorpay_signature
+      typeof razorpay_order_id !== "string" ||
+      typeof razorpay_payment_id !== "string" ||
+      typeof razorpay_signature !== "string"
     ) {
       return res.status(400).json({
         success: false,
@@ -162,28 +260,9 @@ exports.verifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    if (!process.env.RAZORPAY_KEY_SECRET) {
-      console.error("RAZORPAY_KEY_SECRET is missing");
-
-      return res.status(500).json({
-        success: false,
-        message: "Payment configuration error",
-      });
-    }
-
     // 2. Verify Razorpay payment signature
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest("hex");
-
-    const receivedSignature = Buffer.from(razorpay_signature, "hex");
-    const expectedSignatureBuffer = Buffer.from(expectedSignature, "hex");
-
-    if (
-      receivedSignature.length !== expectedSignatureBuffer.length ||
-      !crypto.timingSafeEqual(receivedSignature, expectedSignatureBuffer)
-    ) {
+    const expectedSignature = hmacHex(process.env.RAZORPAY_KEY_SECRET, `${razorpay_order_id}|${razorpay_payment_id}`);
+    if (!signatureMatches(expectedSignature, razorpay_signature)) {
       return res.status(400).json({
         success: false,
         message: "Payment signature verification failed",
@@ -194,44 +273,31 @@ exports.verifyRazorpayPayment = async (req, res) => {
     const order = await razorpay.orders.fetch(razorpay_order_id);
 
     // 4. Match the order with the authenticated user and course
-    const orderUserId = String(order.notes?.userId || "");
-    const orderCourseId = String(order.notes?.courseId || "");
-    const loggedInUserId = String(req.user._id);
-    const requestedCourseId = String(courseId);
-
-    if (orderUserId !== loggedInUserId) {
+    if (String(order.notes?.userId || "") !== String(req.user._id)) {
       return res.status(400).json({
         success: false,
         message: "Payment order does not belong to this user",
       });
     }
 
-    // Resolve the frontend slug/ID to the MongoDB course document.
-    let course = await Course.findOne({
-      id: courseId,
-      isActive: true,
-    });
-
+    const course = await findActiveCourse(courseId);
     if (!course) {
-      course = await Course.findById(courseId).catch(() => null);
-    }
-
-    if (!course || course.isActive === false) {
       return res.status(404).json({
         success: false,
         message: "Course not found or inactive",
       });
     }
 
-    if (String(course._id) !== orderCourseId) {
+    if (String(course._id) !== String(order.notes?.courseId || "")) {
       return res.status(400).json({
         success: false,
         message: "Payment order does not match this course",
       });
     }
 
-    // 5. Fetch and verify the payment
-    const payment = await razorpay.payments.fetch(razorpay_payment_id);
+    // 5. Fetch the payment, capturing it if it is only authorized
+    let payment = await razorpay.payments.fetch(razorpay_payment_id);
+    if (payment.order_id === razorpay_order_id) payment = await ensureCaptured(razorpay, payment);
 
     if (
       payment.order_id !== razorpay_order_id ||
@@ -245,60 +311,22 @@ exports.verifyRazorpayPayment = async (req, res) => {
       });
     }
 
-     
-
-    // Payment is captured; continue with the server-recorded order amount.
-
-    // 7. Load the authenticated user
-    const user = await User.findById(req.user._id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found",
-      });
-    }
-
-    // Verify values recorded in the server-created Razorpay order notes.
-    // Coupon expiry/usage may change after order creation; do not invalidate an already captured payment.
-    const originalAmount = Number(order.notes?.originalAmount);
-    const expectedFinalAmount = Number(order.notes?.finalAmount);
-    const discountAmount = Number(order.notes?.discountAmount || 0);
-    const orderCouponCode = String(order.notes?.couponCode || "").trim().toUpperCase();
-    const requestedCouponCode = String(couponCode || "").trim().toUpperCase();
-    if (orderCouponCode !== requestedCouponCode) {
+    // 6. Check the values recorded on the server-created order. Coupon expiry or
+    // usage may change after the order was created; that does not undo a captured payment.
+    const notes = readOrderNotes(order);
+    if (notes.couponCode !== String(couponCode || "").trim().toUpperCase()) {
       return res.status(400).json({ success: false, message: "Payment coupon does not match this purchase" });
     }
-    if (!Number.isFinite(originalAmount) || !Number.isFinite(expectedFinalAmount) || expectedFinalAmount <= 0 || discountAmount < 0 || Math.abs((originalAmount - discountAmount) - expectedFinalAmount) > 0.02 || order.amount !== Math.round(expectedFinalAmount * 100)) {
-      return res.status(400).json({ success: false, message: "Payment amount does not match this purchase" });
-    }
 
-    // 9. Grant access only if the course has not already been purchased
-    const alreadyPurchased = user.purchasedCourses.some(
-      (item) => String(item.course?._id || item.course) === String(course._id),
-    );
-
-    if (!alreadyPurchased) {
-      user.purchasedCourses.push({
-        course: course._id,
-        purchasedAt: new Date(),
-      });
-
-      await user.save();
-    }
-
-    // Unique transactionId makes coupon accounting idempotent on payment retries.
-    if (orderCouponCode && order.notes?.couponId) {
-      const existingUsage = await CouponUsage.findOne({ transactionId: razorpay_payment_id }).select("_id");
-      if (!existingUsage) {
-        try {
-          await CouponUsage.create({ coupon: order.notes.couponId, user: user._id, code: orderCouponCode, course: course._id, transactionId: razorpay_payment_id, originalAmount, finalAmount: expectedFinalAmount, discountAmount });
-          await Coupon.updateOne({ _id: order.notes.couponId }, { $inc: { usedCount: 1 } });
-        } catch (usageError) {
-          if (usageError.code !== 11000) throw usageError;
-        }
-      }
-    }
+    // 7. Grant access (idempotent; the webhook may have done it already)
+    const { alreadyPurchased } = await grantPurchase({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      amount: order.amount,
+      currency: order.currency,
+      notes,
+      via: "verify",
+    });
 
     return res.status(200).json({
       success: true,
@@ -308,10 +336,66 @@ exports.verifyRazorpayPayment = async (req, res) => {
     });
   } catch (error) {
     console.error("Razorpay verification error:", error);
+    return sendError(res, error, "Unable to verify payment");
+  }
+};
 
-    return res.status(error.statusCode === 503 ? 503 : 500).json({
-      success: false,
-      message: error.statusCode === 503 ? error.message : "Unable to verify payment",
+// POST /api/payment/razorpay/webhook
+// Grants access even when the customer's browser never calls /verify
+// (tab closed, network dropped). Configure it in the Razorpay dashboard for
+// the events order.paid, payment.captured and payment.authorized.
+exports.razorpayWebhook = async (req, res) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not set");
+    return res.status(503).json({ success: false, message: "Webhook is not configured" });
+  }
+
+  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
+  if (!signatureMatches(hmacHex(secret, rawBody), req.get("x-razorpay-signature"))) {
+    return res.status(400).json({ success: false, message: "Invalid webhook signature" });
+  }
+
+  let event;
+  try {
+    event = JSON.parse(rawBody.toString("utf8"));
+  } catch {
+    return res.status(400).json({ success: false, message: "Invalid webhook body" });
+  }
+
+  try {
+    const name = event.event;
+    let payment = event.payload?.payment?.entity;
+    if (!["order.paid", "payment.captured", "payment.authorized"].includes(name) || !payment?.order_id) {
+      return res.status(200).json({ success: true, ignored: true });
+    }
+
+    const razorpay = getRazorpay();
+    const order = event.payload?.order?.entity || (await razorpay.orders.fetch(payment.order_id));
+    // Orders not created by this site (no purchase notes) are ignored.
+    if (!order?.notes?.courseId || !order?.notes?.userId) {
+      return res.status(200).json({ success: true, ignored: true });
+    }
+
+    payment = await ensureCaptured(razorpay, payment);
+    if (payment.status !== "captured" || payment.amount !== order.amount || payment.currency !== order.currency) {
+      return res.status(200).json({ success: true, ignored: true });
+    }
+
+    const notes = readOrderNotes(order);
+    await grantPurchase({
+      orderId: order.id,
+      paymentId: payment.id,
+      amount: order.amount,
+      currency: order.currency,
+      notes,
+      via: "webhook",
     });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Razorpay webhook error:", error);
+    // A 5xx makes Razorpay retry the webhook later.
+    if (error.statusCode === 400) return res.status(200).json({ success: true, ignored: true });
+    return res.status(500).json({ success: false, message: "Webhook processing failed" });
   }
 };

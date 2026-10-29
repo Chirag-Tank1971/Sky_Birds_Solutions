@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { formatPrice } from "../data/courses";
 import API from "../api/axios";
-import { ShieldCheck, CreditCard, Loader2 } from "lucide-react";
+import { ShieldCheck, Loader2 } from "lucide-react";
+import Shine from "./Shine";
 
 function loadRazorpayScript() {
   return new Promise((resolve) => {
@@ -40,7 +41,7 @@ export default function PaymentModal({
     try {
       const { data } = await API.post("/coupons/validate", {
         code,
-        amount: Number(course.salePrice ?? course.price),
+        amount: Number(course.price),
       });
       if (!data.success || !data.data) {
         throw new Error(data.message || "Coupon could not be applied");
@@ -67,12 +68,6 @@ export default function PaymentModal({
   }
 
   async function handleRazorpayCheckout() {
-    const loaded = await loadRazorpayScript();
-    if (!loaded)
-      throw new Error(
-        "Unable to load Razorpay checkout. Please check your connection and try again.",
-      );
-
     // The backend must create the Razorpay order and return orderId, keyId,
     // amount (in paise), currency, and optionally customer/prefill details.
     const { data } = await API.post("/payment/razorpay/initiate", {
@@ -83,6 +78,22 @@ export default function PaymentModal({
     if (!data.success || !data.data) {
       throw new Error(data.message || "Failed to initialize Razorpay payment");
     }
+
+    // Free course or a 100% coupon: the server has already unlocked it.
+    if (data.data.free) {
+      try {
+        await onSuccess?.();
+      } catch {
+        // Access is already granted server-side.
+      }
+      return;
+    }
+
+    const loaded = await loadRazorpayScript();
+    if (!loaded)
+      throw new Error(
+        "Unable to load Razorpay checkout. Please check your connection and try again.",
+      );
 
     const order = data.data;
     if (
@@ -177,11 +188,11 @@ export default function PaymentModal({
   }
 
   const busy = paying || processing;
-  const basePrice = Number(course.salePrice ?? course.price);
+  const basePrice = Number(course.price);
   const payableAmount = appliedCoupon ? appliedCoupon.finalAmount : basePrice;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
+    <div data-lenis-prevent className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
       <div className="my-auto w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
         <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
           <div className="min-w-0">
@@ -290,23 +301,26 @@ export default function PaymentModal({
           <div className="flex items-start gap-2 rounded-lg bg-gray-50 p-3 text-[11px] text-gray-500">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-leaf" />
             <span>
-              "Pay securely with UPI, cards, net banking, and supported wallets
-              through Razorpay."
+              Pay securely with UPI, cards, net banking, and supported wallets
+              through Razorpay.
             </span>
           </div>
 
           <button
             type="submit"
             disabled={busy || couponLoading}
-            className="btn-shine flex w-full items-center justify-center gap-2 rounded-full bg-leaf py-3 text-sm font-bold text-white shadow-sm transition hover:bg-forest disabled:opacity-70"
+            className="relative overflow-hidden flex w-full items-center justify-center gap-2 rounded-full bg-leaf py-3 text-sm font-bold text-white shadow-sm transition hover:bg-forest disabled:opacity-70"
           >
+            <Shine />
             {busy ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Opening secure checkout...
               </>
             ) : (
-              `Pay Now (${formatPrice(payableAmount)})`
+              Number(payableAmount) === 0
+                ? "Unlock for free"
+                : `Pay Now (${formatPrice(payableAmount)})`
             )}
           </button>
         </form>

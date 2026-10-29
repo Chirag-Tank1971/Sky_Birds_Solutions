@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { useUser } from "../context/UserContext";
+import API from "../api/axios";
 import { Lock, ShieldAlert, Maximize, Minimize } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_URL;
+// Same API address as the rest of the site (including its production fallback).
+const API_BASE = API.defaults.baseURL.replace(/\/+$/, "");
+const API_ORIGIN = API_BASE.replace(/\/api$/, "");
+// Give up after this many back-to-back failed refreshes.
+const MAX_REFRESH_ATTEMPTS = 3;
 
 export default function ProtectedVideo({ title, courseId, videoId }) {
   const { user, token } = useUser();
@@ -19,6 +24,105 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
   useEffect(() => {
     let active = true;
     let hls;
+    let refreshTimer;
+    let refreshing = null;
+    let failedRefreshes = 0;
+    // The latest playback token. hls.js sends it in the Authorization header,
+    // which the API reads before the token in the URL.
+    let currentToken = "";
+    const video = videoRef.current;
+
+    const showError = (error) => {
+      if (!active) return;
+      setLoadingStream(false);
+      if (error.status === 401)
+        setStreamError("Please log in again to continue.");
+      else if (error.status === 403)
+        setStreamError("You do not own this course.");
+      else if (error.status === 404)
+        setStreamError("This lesson is not available.");
+      else
+        setStreamError(error.message || "Unable to start secure playback.");
+    };
+
+    async function authorize() {
+      const response = await fetch(
+        `${API_BASE}/courses/${encodeURIComponent(courseId)}/videos/${encodeURIComponent(videoId)}/playback`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(data.message || "Playback authorization failed");
+        error.status = response.status;
+        throw error;
+      }
+      currentToken = data.token;
+      return data;
+    }
+
+    function streamUrlFor(auth) {
+      const masterUrl = new URL(auth.masterUrl, API_ORIGIN);
+      masterUrl.searchParams.set("token", auth.token);
+      return masterUrl.toString();
+    }
+
+    // Renew the token before it expires so long lessons keep playing.
+    function scheduleRefresh(expiresInSeconds) {
+      clearTimeout(refreshTimer);
+      const seconds = Math.max(30, Number(expiresInSeconds || 300) * 0.8);
+      refreshTimer = setTimeout(() => {
+        refreshToken().catch(() => {});
+      }, seconds * 1000);
+    }
+
+    // One refresh at a time; concurrent callers share it.
+    function refreshToken() {
+      if (!refreshing) {
+        refreshing = authorize()
+          .then((auth) => {
+            failedRefreshes = 0;
+            scheduleRefresh(auth.expiresIn);
+            return auth;
+          })
+          .catch((error) => {
+            failedRefreshes += 1;
+            if (error.status === 401 || error.status === 403 || failedRefreshes >= MAX_REFRESH_ATTEMPTS) showError(error);
+            else scheduleRefresh(10);
+            throw error;
+          })
+          .finally(() => {
+            refreshing = null;
+          });
+      }
+      return refreshing;
+    }
+
+    // Safari/iOS play HLS natively; the token is in the URL, so reload the
+    // stream with a fresh one and continue from the same second.
+    async function reloadNative() {
+      const position = video.currentTime;
+      const wasPlaying = !video.paused;
+      const auth = await refreshToken();
+      if (!active) return;
+      video.addEventListener(
+        "loadedmetadata",
+        () => {
+          video.currentTime = position;
+          if (wasPlaying) video.play().catch(() => {});
+        },
+        { once: true },
+      );
+      video.src = streamUrlFor(auth);
+    }
+
+    const onNativeError = () => {
+      if (!active || failedRefreshes >= MAX_REFRESH_ATTEMPTS) return;
+      reloadNative().catch(() => {});
+    };
 
     async function start() {
       if (!token || !courseId || !videoId) {
@@ -31,42 +135,20 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
       setStreamError("");
 
       try {
-        const authResponse = await fetch(
-          `${API_BASE}/courses/${encodeURIComponent(courseId)}/videos/${encodeURIComponent(videoId)}/playback`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            cache: "no-store",
-          },
-        );
-
-        const authData = await authResponse.json().catch(() => ({}));
-        if (!authResponse.ok) {
-          const error = new Error(
-            authData.message || "Playback authorization failed",
-          );
-          error.status = authResponse.status;
-          throw error;
-        }
-
-        // ---- FIXED URL CONSTRUCTION ----
-        const apiOrigin = API_BASE.replace(/\/api\/?$/, "");
-        const masterUrl = new URL(authData.masterUrl, apiOrigin);
-        masterUrl.searchParams.set("token", authData.token);
-        const streamUrl = masterUrl.toString();
-        // --------------------------------
-
-        const video = videoRef.current;
+        const auth = await authorize();
+        if (!active) return;
         if (!video) throw new Error("Video player is unavailable");
+        const streamUrl = streamUrlFor(auth);
 
         if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.addEventListener("error", onNativeError);
           video.src = streamUrl;
         } else if (Hls.isSupported()) {
           hls = new Hls({
             enableWorker: true,
             lowLatencyMode: false,
             xhrSetup: (xhr) => {
-              xhr.setRequestHeader("Authorization", `Bearer ${authData.token}`);
+              xhr.setRequestHeader("Authorization", `Bearer ${currentToken}`);
             },
           });
           hlsRef.current = hls;
@@ -74,10 +156,16 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
           hls.attachMedia(video);
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (!active || !data?.fatal) return;
-            if (data.response?.code === 410) {
-              setStreamError(
-                "Playback authorization expired. Please reload the lesson.",
-              );
+            const code = data.response?.code;
+            if (code === 410 || code === 401) {
+              // Token expired (for example after the computer slept): renew and resume.
+              refreshToken()
+                .then(() => {
+                  if (active) hls.startLoad(video.currentTime);
+                })
+                .catch(() => {});
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hls.recoverMediaError();
             } else {
               setStreamError("Unable to play the secure video stream.");
             }
@@ -86,20 +174,10 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
           throw new Error("This browser does not support HLS playback.");
         }
 
+        scheduleRefresh(auth.expiresIn);
         if (active) setLoadingStream(false);
       } catch (error) {
-        if (!active) return;
-        setLoadingStream(false);
-        if (error.status === 401)
-          setStreamError("Please log in again to continue.");
-        else if (error.status === 403)
-          setStreamError("You do not own this course.");
-        else if (error.status === 404)
-          setStreamError("This lesson is not available.");
-        else if (error.status === 410)
-          setStreamError("Playback authorization expired. Reload the lesson.");
-        else
-          setStreamError(error.message || "Unable to start secure playback.");
+        showError(error);
       }
     }
 
@@ -107,10 +185,11 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
 
     return () => {
       active = false;
+      clearTimeout(refreshTimer);
       if (hls) hls.destroy();
       hlsRef.current = null;
-      const video = videoRef.current;
       if (video) {
+        video.removeEventListener("error", onNativeError);
         video.pause();
         video.removeAttribute("src");
         video.load();

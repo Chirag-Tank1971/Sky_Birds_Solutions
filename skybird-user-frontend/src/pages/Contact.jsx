@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import API from "../api/axios";
 import { fetchSiteContent } from "../api/site";
 import { Mail, Phone, MapPin, CheckCircle2, AlertCircle, Loader2, Send } from "lucide-react";
+import RollText from "../components/RollText";
 
 export default function Contact() {
   const [form, setForm] = useState({
@@ -218,12 +219,12 @@ export default function Contact() {
                 {status === "loading" ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Submitting Query...
+                    <RollText>Submitting Query...</RollText>
                   </>
                 ) : (
                   <>
                     <Send className="w-3.5 h-3.5" />
-                    Submit Inquiry
+                    <RollText>Submit Inquiry</RollText>
                   </>
                 )}
               </button>

@@ -40,7 +40,7 @@ exports.getAllContacts = async (req, res) => {
     const filter = {};
 
     if (status && status !== "all") {
-      filter.status = status;
+      filter.status = String(status);
     }
 
     if (search) {

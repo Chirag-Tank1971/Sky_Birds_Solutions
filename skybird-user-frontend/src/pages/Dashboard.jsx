@@ -2,9 +2,10 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { formatPrice } from "../data/courses"
 import { useUser } from "../context/UserContext"
+import RollText from "../components/RollText";
 
 export default function Dashboard() {
-  const { user, purchasedCourses, refreshPurchased } = useUser()
+  const { user, purchasedCourses, purchasesStatus, refreshPurchased } = useUser()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -21,6 +22,12 @@ export default function Dashboard() {
 
   const owned = purchasedCourses || []
 
+  const retry = async () => {
+    setLoading(true)
+    await refreshPurchased()
+    setLoading(false)
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-16">
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-forest">
@@ -36,7 +43,10 @@ export default function Dashboard() {
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <Stat label="Owned courses" value={owned.length} />
+        <Stat
+          label="Owned courses"
+          value={purchasesStatus === "error" && owned.length === 0 ? "—" : owned.length}
+        />
         <Stat
           label="Account"
           value={user?.mobile ? `+91 ${user.mobile}` : "—"}
@@ -51,6 +61,17 @@ export default function Dashboard() {
         <div className="mt-8 flex justify-center">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-leaf border-t-transparent" />
         </div>
+      ) : purchasesStatus === "error" && owned.length === 0 ? (
+        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-8 text-center" role="alert">
+          <p className="text-red-700">We couldn't load your courses. Please check your connection and try again.</p>
+          <button
+            type="button"
+            onClick={retry}
+            className="mt-4 inline-block rounded-full bg-leaf px-5 py-2 text-sm font-semibold text-white"
+          >
+            <RollText>Try again</RollText>
+          </button>
+        </div>
       ) : owned.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-dashed border-forest/30 bg-mint/50 p-8 text-center">
           <p className="text-ink/70">No courses yet. Buy a course to unlock videos.</p>
@@ -58,7 +79,7 @@ export default function Dashboard() {
             to="/courses"
             className="mt-4 inline-block rounded-full bg-leaf px-5 py-2 text-sm font-semibold text-white"
           >
-            Browse courses
+            <RollText>Browse courses</RollText>
           </Link>
         </div>
       ) : (
@@ -95,7 +116,7 @@ export default function Dashboard() {
                 to={`/watch/${course.id}`}
                 className="rounded-full bg-leaf px-4 py-1.5 text-sm font-semibold text-white hover:bg-forest"
               >
-                Watch
+                <RollText>Watch</RollText>
               </Link>
             </div>
           ))}

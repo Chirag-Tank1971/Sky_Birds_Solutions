@@ -14,6 +14,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { fetchSiteContent } from "../api/site";
+import RollText from "../components/RollText";
 
 const defaultStats = [
   { value: "Since 2019", label: "E-Commerce Journey", icon: Award },
@@ -253,7 +254,7 @@ export default function About() {
                   to="/courses"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-leaf px-6 py-3.5 text-sm font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-forest sm:w-auto"
                 >
-                  Explore the Course <ArrowRight className="h-4 w-4" />
+                  <RollText>Explore the Course</RollText> <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>
@@ -327,14 +328,13 @@ export default function About() {
                 to="/courses"
                 className="inline-flex items-center gap-2 rounded-full bg-leaf px-6 py-3.5 text-sm font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-forest"
               >
-                {about.hero.primaryCta}
-                <ArrowRight className="h-4 w-4" />
+                <RollText>{about.hero.primaryCta}</RollText> <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
                 to="/contact"
                 className="inline-flex items-center gap-2 rounded-full border border-forest/20 bg-white/80 px-6 py-3.5 text-sm font-semibold text-forest transition hover:bg-white"
               >
-                {about.hero.secondaryCta}
+                <RollText>{about.hero.secondaryCta}</RollText>
               </Link>
             </div>
 
@@ -556,14 +556,13 @@ export default function About() {
               to="/courses"
               className="inline-flex items-center gap-2 rounded-full bg-leaf px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-forest"
             >
-              {about.cta.primaryLabel}
-              <ArrowRight className="h-4 w-4" />
+              <RollText>{about.cta.primaryLabel}</RollText> <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               to="/contact"
               className="rounded-full border border-forest/20 bg-white px-6 py-3 text-sm font-semibold text-forest transition hover:bg-gray-50"
             >
-              {about.cta.secondaryLabel}
+              <RollText>{about.cta.secondaryLabel}</RollText>
             </Link>
           </div>
         </div>

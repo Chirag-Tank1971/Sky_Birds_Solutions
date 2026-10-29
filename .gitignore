@@ -1,7 +1,9 @@
 ﻿node_modules/
 .env
 .env.*
+!.env.example
 .playwright-mcp/
 dist/
 build/
 skybird-api/private-videos/
+skybird-api/uploads/

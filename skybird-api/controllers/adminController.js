@@ -2,9 +2,32 @@ const Platform = require("../models/Platform");
 const Course = require("../models/Course");
 const User = require("../models/User");
 const Contact = require("../models/Contact");
+const Testimonial = require("../models/Testimonial");
+const crypto = require("crypto");
 const { isConfigured, uploadStream } = require("../config/cloudinary");
-const { v4: uuidv4 } = require("uuid");
-const { processVideo, cleanupTempFile } = require("../services/videoService");
+const { processVideo, enqueueVideo, getVideoStatus, deleteVideoFiles, cleanupTempFile, validateVideoId } = require("../services/videoService");
+const { rejectOversizedThumbnail } = require("../middleware/upload");
+
+const newLessonId = () => `vid-${crypto.randomUUID().slice(0, 8)}`;
+
+const findCourse = async (idOrObjectId) => {
+  const id = String(idOrObjectId || "");
+  return (await Course.findOne({ id })) || (/^[a-f\d]{24}$/i.test(id) ? await Course.findById(id) : null);
+};
+
+// Delete the files of videos no course lesson or testimonial points to any more.
+const deleteUnusedVideos = async (videoIds) => {
+  for (const videoId of new Set(videoIds)) {
+    if (!videoId || !validateVideoId(videoId)) continue;
+    const [inCourse, inTestimonial] = await Promise.all([
+      Course.exists({ "videos.videoId": videoId }),
+      Testimonial.exists({ videoId }),
+    ]);
+    if (!inCourse && !inTestimonial) deleteVideoFiles(videoId);
+  }
+};
+
+const videoIdsOf = (videos) => (videos || []).map((video) => video.videoId).filter(Boolean);
 
 exports.uploadThumbnail = async (req, res) => {
   try {
@@ -27,10 +50,16 @@ exports.uploadThumbnail = async (req, res) => {
           public_id: result.public_id,
         });
       } catch (cloudErr) {
-        console.warn("Cloudinary upload failed, using fallback:", cloudErr.message);
+        // Never fall back to storing the image inside the course record.
+        console.error("Cloudinary upload failed:", cloudErr.message);
+        return res.status(502).json({
+          success: false,
+          message: "Image upload failed. Please try again.",
+        });
       }
     }
 
+    // Local development without Cloudinary only.
     const base64Data = req.file.buffer.toString("base64");
     const mimeType = req.file.mimetype;
     const dataUri = `data:${mimeType};base64,${base64Data}`;
@@ -54,17 +83,26 @@ exports.uploadVideo = async (req, res) => {
       return res.status(400).json({ success: false, message: "Please select a video file to upload" });
     }
 
-    const processed = await processVideo(req.file.path);
-    return res.status(200).json({
+    // Respond right away; conversion runs in the background. The admin panel
+    // polls GET /api/admin/videos/:videoId/status until it is ready.
+    const videoId = enqueueVideo(req.file.path);
+    return res.status(202).json({
       success: true,
-      message: "Video processed into protected HLS",
-      videoId: processed.videoId,
+      message: "Video uploaded. Processing has started.",
+      videoId,
+      status: "processing",
       size: req.file.size,
     });
   } catch (error) {
     if (req.file?.path) cleanupTempFile(req.file.path);
     return res.status(500).json({ success: false, message: "Failed to process video" });
   }
+};
+
+exports.getVideoProcessingStatus = (req, res) => {
+  const { videoId } = req.params;
+  if (!validateVideoId(videoId)) return res.status(404).json({ success: false, message: "Video not found" });
+  return res.status(200).json({ success: true, videoId, ...getVideoStatus(videoId) });
 };
 
 exports.createPlatform = async (req, res) => {
@@ -178,6 +216,10 @@ exports.getAllPlatformsAdmin = async (req, res) => {
 
 exports.createCourse = async (req, res) => {
   try {
+    if (rejectOversizedThumbnail(req)) {
+      return res.status(400).json({ success: false, message: "Thumbnail must be 8 MB or smaller" });
+    }
+
     const {
       id,
       platform,
@@ -233,7 +275,7 @@ exports.createCourse = async (req, res) => {
 
     if (processedVideoId) {
       parsedVideos.push({
-        id: `vid-${uuidv4().slice(0, 8)}`,
+        id: newLessonId(),
         title: title,
         duration: duration || "",
         videoId: processedVideoId,
@@ -241,7 +283,7 @@ exports.createCourse = async (req, res) => {
     }
 
     parsedVideos = parsedVideos.map((video) => ({
-      id: video.id || `vid-${uuidv4().slice(0, 8)}`,
+      id: video.id || newLessonId(),
       title: video.title,
       duration: video.duration || "",
       videoId: video.videoId || "",
@@ -277,6 +319,18 @@ exports.createCourse = async (req, res) => {
 
 exports.updateCourse = async (req, res) => {
   try {
+    if (rejectOversizedThumbnail(req)) {
+      return res.status(400).json({ success: false, message: "Thumbnail must be 8 MB or smaller" });
+    }
+
+    const existing = await findCourse(req.params.id);
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
+    }
+
     const allowedFields = ["id", "platform", "title", "price", "duration", "lessons", "level", "thumbnail", "description", "videos", "isActive"];
     const updateData = {};
     for (const field of allowedFields) {
@@ -290,11 +344,13 @@ exports.updateCourse = async (req, res) => {
       if (req.files.video && req.files.video[0]) {
         const processed = await processVideo(req.files.video[0].path);
         updateData.videoUrl = "";
+        // Without a lesson list in the request, add to the course's current lessons
+        // instead of replacing them all.
         const currentVideos = updateData.videos
           ? (typeof updateData.videos === "string" ? JSON.parse(updateData.videos) : updateData.videos)
-          : [];
+          : existing.videos.map((video) => video.toObject());
         currentVideos.push({
-          id: `vid-${uuidv4().slice(0, 8)}`,
+          id: newLessonId(),
           title: updateData.title || "Lesson",
           duration: updateData.duration || "",
           videoId: processed.videoId,
@@ -309,7 +365,7 @@ exports.updateCourse = async (req, res) => {
     }
     if (Array.isArray(updateData.videos)) {
       updateData.videos = updateData.videos.map((video) => ({
-        id: video.id || `vid-${uuidv4().slice(0, 8)}`,
+        id: video.id || newLessonId(),
         title: video.title || "Lesson",
         duration: video.duration || "",
         videoId: video.videoId || "",
@@ -325,18 +381,11 @@ exports.updateCourse = async (req, res) => {
       updateData.lessons = Number(updateData.lessons);
     }
 
-    let course = await Course.findOneAndUpdate(
-      { id: req.params.id },
-      updateData,
-      { new: true, runValidators: true }
-    );
-
-    if (!course) {
-      course = await Course.findByIdAndUpdate(req.params.id, updateData, {
-        new: true,
-        runValidators: true,
-      });
-    }
+    const previousVideoIds = videoIdsOf(existing.videos);
+    const course = await Course.findByIdAndUpdate(existing._id, updateData, {
+      new: true,
+      runValidators: true,
+    });
 
     if (!course) {
       return res.status(404).json({
@@ -344,6 +393,10 @@ exports.updateCourse = async (req, res) => {
         message: "Course not found",
       });
     }
+
+    // Lessons removed or given a new video: delete the old files if nothing else uses them.
+    const currentVideoIds = new Set(videoIdsOf(course.videos));
+    await deleteUnusedVideos(previousVideoIds.filter((videoId) => !currentVideoIds.has(videoId)));
 
     res.status(200).json({
       success: true,
@@ -428,7 +481,7 @@ exports.addVideoToCourse = async (req, res) => {
     }
 
     course.videos.push({
-      id: `vid-${uuidv4().slice(0, 8)}`,
+      id: newLessonId(),
       title,
       duration: duration || "",
       videoId,
@@ -458,9 +511,11 @@ exports.removeVideoFromCourse = async (req, res) => {
       });
     }
 
+    const removedVideoIds = videoIdsOf(course.videos.filter((v) => v.id === req.params.videoId));
     course.videos = course.videos.filter((v) => v.id !== req.params.videoId);
     course.lessons = course.videos.length;
     await course.save();
+    await deleteUnusedVideos(removedVideoIds);
 
     res.status(200).json({
       success: true,
@@ -582,11 +637,10 @@ exports.getStats = async (req, res) => {
     const totalQueries = await Contact.countDocuments();
     const newQueries = await Contact.countDocuments({ status: "new" });
 
-    const users = await User.find().select("purchasedCourses");
-    const totalPurchases = users.reduce(
-      (sum, u) => sum + (u.purchasedCourses ? u.purchasedCourses.length : 0),
-      0
-    );
+    const [purchaseTotals] = await User.aggregate([
+      { $group: { _id: null, total: { $sum: { $size: { $ifNull: ["$purchasedCourses", []] } } } } },
+    ]);
+    const totalPurchases = purchaseTotals?.total || 0;
 
     res.status(200).json({
       success: true,

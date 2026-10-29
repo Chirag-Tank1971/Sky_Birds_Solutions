@@ -1,24 +1,15 @@
-const fs = require("fs");
-const path = require("path");
-const http = require("http");
-const https = require("https");
 const jwt = require("jsonwebtoken");
 const Course = require("../models/Course");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
-const { verifyPlaybackToken, createPlaybackToken, getProtectedFile } = require("../services/playbackService");
+const { createPlaybackToken } = require("../services/playbackService");
+const { issuedBeforePasswordChange } = require("../middleware/auth");
 
 const verifyAuthUser = async (req) => {
-  let token = null;
-
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
-    token = req.headers.authorization.split(" ")[1];
-  } else if (req.query.token) {
-    token = req.query.token;
-  }
+  // The 7-day login token is accepted only from the header, never from the URL,
+  // so it does not end up in server or proxy logs.
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
 
   if (!token) return null;
 
@@ -28,8 +19,8 @@ const verifyAuthUser = async (req) => {
       const admin = await Admin.findById(decoded.id);
       if (admin) return { user: admin, role: "admin" };
     }
-    const user = await User.findById(decoded.id);
-    if (user && !user.isBlocked) return { user, role: "customer" };
+    const user = await User.findById(decoded.id).select("+passwordChangedAt");
+    if (user && !user.isBlocked && !issuedBeforePasswordChange(user, decoded)) return { user, role: "customer" };
     return null;
   } catch (err) {
     return null;
@@ -41,8 +32,9 @@ exports.getAllCourses = async (req, res) => {
     const { platform, level, search } = req.query;
     const filter = { isActive: true };
 
-    if (platform && platform !== "all") filter.platform = platform;
-    if (level) filter.level = level;
+    // String() stops values like ?level[$ne]=x being treated as query operators.
+    if (platform && platform !== "all") filter.platform = String(platform);
+    if (level) filter.level = String(level);
     if (search) {
       const safeSearch = String(search).slice(0, 80).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filter.$or = [
@@ -141,10 +133,3 @@ exports.createPlaybackAuthorization = async (req, res) => {
   }
 };
 
-exports.streamCourseVideo = async (req, res) => {
-  // Kept as a compatibility endpoint, but it no longer streams raw MP4 files.
-  return res.status(410).json({
-    success: false,
-    message: "Legacy direct video streaming is disabled. Use protected HLS playback.",
-  });
-};

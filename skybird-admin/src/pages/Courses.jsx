@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import API from '../api/axios';
+import API, { assetUrl } from '../api/axios';
 import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 
@@ -99,7 +99,7 @@ const Courses = () => {
                     <div className="flex items-center gap-3">
                       {c.thumbnail ? (
                         <img
-                          src={c.thumbnail.startsWith('http') ? c.thumbnail : `http://localhost:5000${c.thumbnail}`}
+                          src={assetUrl(c.thumbnail)}
                           alt=""
                           className="w-12 h-12 rounded-lg object-cover"
                         />

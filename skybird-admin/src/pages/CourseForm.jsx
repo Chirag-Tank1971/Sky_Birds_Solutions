@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import API from "../api/axios";
+import API, { assetUrl } from "../api/axios";
 import toast from "react-hot-toast";
 import {
   ArrowLeft,
@@ -9,7 +9,6 @@ import {
   Save,
   Upload,
   Image as ImageIcon,
-  Video as VideoIcon,
   CheckCircle,
   Loader2,
   ChevronUp,
@@ -91,6 +90,31 @@ const VideoPreviewModal = ({ preview, onClose }) => {
   );
 };
 
+const VideoStatusLabel = ({ status }) => {
+  if (status === "processing") {
+    return (
+      <div className="flex items-center gap-1 mt-1 text-amber-600">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <span className="text-xs font-medium">Processing video… you can keep editing and save</span>
+      </div>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <div className="flex items-center gap-1 mt-1 text-red-600">
+        <X className="w-3.5 h-3.5" />
+        <span className="text-xs font-medium">Processing failed. Replace this video.</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1 mt-1">
+      <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+      <span className="text-xs text-green-600 font-medium">Secure HLS video ready</span>
+    </div>
+  );
+};
+
 const CourseForm = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
@@ -102,14 +126,12 @@ const CourseForm = () => {
 
   // Cloudinary / Thumbnail upload state
   const [uploadingThumb, setUploadingThumb] = useState(false);
-  const [uploadingMainVideo, setUploadingMainVideo] = useState(false);
   const [uploadingLessonVideo, setUploadingLessonVideo] = useState(false);
   const [replaceTargetId, setReplaceTargetId] = useState(null);
   const [preview, setPreview] = useState(null);
   const [loadingPreviewId, setLoadingPreviewId] = useState(null);
 
   const thumbInputRef = useRef(null);
-  const mainVideoInputRef = useRef(null);
   const lessonVideoInputRef = useRef(null);
 
   const [form, setForm] = useState({
@@ -130,6 +152,43 @@ const CourseForm = () => {
     duration: "",
     videoId: "",
   });
+
+  // Processing state of videos uploaded in this session: videoId -> "processing" | "ready" | "failed".
+  // Videos already saved on the course have no entry and are treated as ready.
+  const [videoStatus, setVideoStatus] = useState({});
+
+  useEffect(() => {
+    const pending = Object.keys(videoStatus).filter((videoId) => videoStatus[videoId] === "processing");
+    if (pending.length === 0) return undefined;
+    const timer = setTimeout(async () => {
+      const updates = {};
+      for (const videoId of pending) {
+        try {
+          const { data } = await API.get(`/admin/videos/${videoId}/status`);
+          if (data.status === "ready") {
+            updates[videoId] = "ready";
+            toast.success("A lesson video finished processing");
+          } else if (data.status === "failed" || data.status === "missing") {
+            updates[videoId] = "failed";
+            toast.error(data.error || "A lesson video failed to process. Please upload it again.");
+          }
+        } catch {
+          // Keep polling; a temporary network error should not mark the video failed.
+        }
+      }
+      if (Object.keys(updates).length) setVideoStatus((prev) => ({ ...prev, ...updates }));
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [videoStatus]);
+
+  // Older API versions processed uploads before replying and sent no status.
+  const trackUpload = (data) => {
+    const status = data.status === "processing" ? "processing" : "ready";
+    setVideoStatus((prev) => ({ ...prev, [data.videoId]: status }));
+    return status;
+  };
+
+  const statusOf = (videoId) => videoStatus[videoId] || "ready";
 
   useEffect(() => {
     const load = async () => {
@@ -154,7 +213,6 @@ const CourseForm = () => {
               level: c.level || "Beginner",
               thumbnail: c.thumbnail || "",
               description: c.description || "",
-              videoId: c.videoId || "",
               videos: (c.videos || []).map((video) => ({
                 id: video.id,
                 title: video.title,
@@ -203,57 +261,6 @@ const CourseForm = () => {
     }
   };
 
-  // Main Course Video File Upload Handler
-  const handleMainVideoUpload = async (e) => {
-    const file = e.target.files?.[0];
-
-    if (!file) return;
-
-    if (!file.type.startsWith("video/")) {
-      toast.error("Please select a valid video file");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("video", file);
-
-    setUploadingMainVideo(true);
-
-    try {
-      const { data } = await API.post("/admin/upload/video", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      if (data.success && data.videoId) {
-        toast.success("Video processed successfully");
-
-        // Optional:
-        // If your course has a main video field in DB,
-        // store ONLY videoId.
-        setForm((prev) => ({
-          ...prev,
-          videoId: data.videoId,
-        }));
-      } else {
-        toast.error(data.message || "Video processing failed");
-      }
-    } catch (err) {
-      console.error("Video upload error:", err);
-
-      toast.error(
-        err.response?.data?.message || "Failed to upload/process video",
-      );
-    } finally {
-      setUploadingMainVideo(false);
-
-      if (mainVideoInputRef.current) {
-        mainVideoInputRef.current.value = "";
-      }
-    }
-  };
-
   // Individual Lesson Video Upload Handler
   const handleLessonVideoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -278,6 +285,8 @@ const CourseForm = () => {
       });
 
       if (data.success && data.videoId) {
+        const status = trackUpload(data);
+        if (status === "processing") toast.success("Video uploaded. Processing in the background…");
         if (replaceTargetId) {
           setForm((prev) => ({
             ...prev,
@@ -294,7 +303,7 @@ const CourseForm = () => {
             ...prev,
             videoId: data.videoId,
           }));
-          toast.success("Lesson video processed successfully");
+          if (status === "ready") toast.success("Lesson video processed successfully");
         }
       } else {
         toast.error(data.message || "Video processing failed");
@@ -389,6 +398,11 @@ const CourseForm = () => {
       return;
     }
 
+    if (form.videos.some((video) => statusOf(video.videoId) === "failed")) {
+      toast.error("A lesson video failed to process. Replace it before saving.");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -401,9 +415,6 @@ const CourseForm = () => {
         level: form.level,
         thumbnail: form.thumbnail,
         description: form.description,
-
-        // Secure video only
-        videoId: form.videoId || null,
 
         videos: form.videos.map((video) => ({
           id: video.id,
@@ -602,7 +613,7 @@ const CourseForm = () => {
               {form.thumbnail && (
                 <div className="relative w-48 h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
                   <img
-                    src={form.thumbnail}
+                    src={assetUrl(form.thumbnail)}
                     alt="Thumbnail Preview"
                     className="w-full h-full object-cover"
                   />
@@ -611,53 +622,6 @@ const CourseForm = () => {
                   </span>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Main Video URL with Local / Secure Video Upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Main Course Video (Secure /videos upload or URL)
-            </label>
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <input
-                  name="videoUrl"
-                  value={form.videoUrl}
-                  onChange={handleChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
-                  placeholder="/uploads/videos/... or external video URL"
-                />
-                <input
-                  type="file"
-                  ref={mainVideoInputRef}
-                  onChange={handleMainVideoUpload}
-                  accept="video/*"
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => mainVideoInputRef.current?.click()}
-                  disabled={uploadingMainVideo}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-sm font-medium transition disabled:opacity-60"
-                >
-                  {uploadingMainVideo ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Uploading Video...
-                    </>
-                  ) : (
-                    <>
-                      <VideoIcon className="w-4 h-4" />
-                      Upload Video File
-                    </>
-                  )}
-                </button>
-              </div>
-              <p className="text-xs text-gray-500">
-                Uploaded videos are saved securely on the server and streamed
-                with encryption token checks.
-              </p>
             </div>
           </div>
 
@@ -712,17 +676,14 @@ const CourseForm = () => {
                       {v.duration || "Video Lesson"}
                     </p>
 
-                    <div className="flex items-center gap-1 mt-1">
-                      <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                      <span className="text-xs text-green-600 font-medium">Secure HLS Video uploaded</span>
-                    </div>
+                    <VideoStatusLabel status={statusOf(v.videoId)} />
                     <p className="text-[11px] text-gray-400 font-mono mt-1 break-all">Video ID: {v.videoId || "Missing video ID"}</p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={() => handlePreviewVideo(v)}
-                      disabled={!v.videoId || loadingPreviewId === v.id}
+                      disabled={!v.videoId || loadingPreviewId === v.id || statusOf(v.videoId) !== "ready"}
                       title="Play this lesson video"
                       className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition disabled:opacity-50"
                     >
@@ -797,10 +758,7 @@ const CourseForm = () => {
             <div className="flex items-center gap-3">
               <div className="flex-1 px-4 py-3 bg-white border border-gray-300 rounded-lg">
                 {newVideo.videoId ? (
-                  <div className="flex items-center gap-2 text-green-600">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm font-medium">Secure HLS video ready</span>
-                  </div>
+                  <VideoStatusLabel status={statusOf(newVideo.videoId)} />
                 ) : (
                   <span className="text-sm text-gray-400">
                     No video uploaded
@@ -825,7 +783,7 @@ const CourseForm = () => {
                 {uploadingLessonVideo ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Processing...
+                    Uploading...
                   </>
                 ) : (
                   <>

@@ -23,6 +23,11 @@ const adminSchema = new mongoose.Schema(
       type: String,
       default: "admin",
     },
+    // Activity notifications newer than this are shown as unread.
+    notificationsReadAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

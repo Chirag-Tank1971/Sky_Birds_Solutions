@@ -4,6 +4,8 @@ import PaymentModal from "../components/PaymentModal";
 import { formatPrice } from "../data/courses";
 import { fetchCourseById } from "../api/courses";
 import { useUser } from "../context/UserContext";
+import RollText from "../components/RollText";
+import Shine from "../components/Shine";
 
 export default function CourseDetail() {
   const { courseId } = useParams();
@@ -40,6 +42,11 @@ export default function CourseDetail() {
       cancelled = true;
     };
   }, [courseId]);
+
+  // The tab shows the course name (SiteSEO leaves course pages to set their own title).
+  useEffect(() => {
+    if (course?.title) document.title = `${course.title} | Sky Birds Solution`;
+  }, [course?.title]);
 
   if (loading) {
     return (
@@ -121,17 +128,19 @@ export default function CourseDetail() {
           {owned ? (
             <Link
               to={`/watch/${course.id}`}
-              className="btn-shine mt-6 block rounded-full bg-leaf py-2.5 text-center font-semibold text-white hover:bg-forest"
+              className="relative overflow-hidden mt-6 block rounded-full bg-leaf py-2.5 text-center font-semibold text-white hover:bg-forest"
             >
-              Watch now
+              <Shine />
+              <RollText>Watch now</RollText>
             </Link>
           ) : (
             <button
               type="button"
               onClick={handleBuy}
-              className="btn-shine mt-6 w-full rounded-full bg-leaf py-2.5 font-semibold text-white hover:bg-forest"
+              className="relative overflow-hidden mt-6 w-full rounded-full bg-leaf py-2.5 font-semibold text-white hover:bg-forest"
             >
-              Buy & unlock
+              <Shine />
+              <RollText>Buy & unlock</RollText>
             </button>
           )}
           {buyError ? (

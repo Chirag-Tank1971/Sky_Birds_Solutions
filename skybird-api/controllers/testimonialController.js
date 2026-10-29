@@ -1,7 +1,16 @@
 const fs = require("fs");
-const { v4: uuidv4 } = require("uuid");
+const crypto = require("crypto");
 const Testimonial = require("../models/Testimonial");
-const { processVideo, cleanupTempFile, videoDir } = require("../services/videoService");
+const { processVideo, cleanupTempFile, videoDir, deleteVideoFiles } = require("../services/videoService");
+const { streamFile } = require("../services/playbackService");
+
+// Absolute base for testimonial video links. Set PUBLIC_API_ORIGIN (for example
+// https://api.example.com) when the API sits behind a proxy; otherwise the request
+// is used, which reports https only when TRUST_PROXY=true.
+function testimonialBase(req) {
+  const origin = (process.env.PUBLIC_API_ORIGIN || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+  return `${origin}/api/testimonials`;
+}
 
 exports.getPublicTestimonials = async (req, res) => {
   try {
@@ -9,7 +18,7 @@ exports.getPublicTestimonials = async (req, res) => {
       .sort({ order: 1, createdAt: 1 })
       .lean();
 
-    const base = `${req.protocol}://${req.get("host")}/api/testimonials`;
+    const base = testimonialBase(req);
     res.json({
       success: true,
       data: items.map((item) => ({
@@ -25,7 +34,7 @@ exports.getPublicTestimonials = async (req, res) => {
 exports.getAdminTestimonials = async (req, res) => {
   try {
     const items = await Testimonial.find().sort({ order: 1, createdAt: 1 }).lean();
-    const base = `${req.protocol}://${req.get("host")}/api/testimonials`;
+    const base = testimonialBase(req);
     res.json({
       success: true,
       data: items.map((item) => ({ ...item, videoUrl: `${base}/${item.id}/master.m3u8` })),
@@ -48,7 +57,7 @@ exports.createTestimonial = async (req, res) => {
 
     const processed = await processVideo(req.file.path);
     const item = await Testimonial.create({
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       name,
       role: String(req.body.role || ""),
       quote: String(req.body.quote || ""),
@@ -89,7 +98,7 @@ exports.deleteTestimonial = async (req, res) => {
   try {
     const item = await Testimonial.findOneAndDelete({ id: req.params.id });
     if (!item) return res.status(404).json({ success: false, message: "Testimonial not found" });
-    if (item.videoId) fs.rmSync(videoDir(item.videoId), { recursive: true, force: true });
+    if (item.videoId) deleteVideoFiles(item.videoId);
     res.json({ success: true, message: "Testimonial deleted" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -104,7 +113,7 @@ function sendFile(res, filePath, contentType) {
     "X-Content-Type-Options": "nosniff",
     "Content-Disposition": "inline",
   });
-  fs.createReadStream(filePath).pipe(res);
+  streamFile(res, filePath);
 }
 
 async function getTestimonialVideo(req, res, filename) {
@@ -120,7 +129,7 @@ async function getTestimonialVideo(req, res, filename) {
     if (!fs.existsSync(filePath)) return res.status(404).end();
 
     if (filename === "master.m3u8") {
-      const content = fs.readFileSync(filePath, "utf8").replace("media.m3u8", "media.m3u8");
+      const content = fs.readFileSync(filePath, "utf8");
       return res.type("application/vnd.apple.mpegurl").send(content);
     }
 

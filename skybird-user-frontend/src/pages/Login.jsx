@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { useUser } from "../context/UserContext";
+import RollText from "../components/RollText";
+import Shine from "../components/Shine";
+
+// Matches the API, which allows one OTP per number per minute.
+const OTP_RESEND_SECONDS = 60;
 
 export default function Login() {
   const {
@@ -67,7 +72,7 @@ export default function Login() {
     setPassword("");
     setConfirmPassword("");
     setInfo(res.message || "OTP sent to your mobile number.");
-    setResendCountdown(30);
+    setResendCountdown(OTP_RESEND_SECONDS);
   };
 
   const handleResendOtp = async () => {
@@ -78,7 +83,7 @@ export default function Login() {
     const res = await sendOtp(mobile, purpose);
     if (res.success) {
       setOtp("");
-      setResendCountdown(30);
+      setResendCountdown(OTP_RESEND_SECONDS);
       setInfo(res.message || "A new OTP has been sent.");
     } else {
       setError(res.message || "Failed to resend OTP. Please try again.");
@@ -110,7 +115,8 @@ export default function Login() {
     e.preventDefault();
     setError("");
     const res = await loginWithPassword({ mobile, password });
-    if (res.success) navigate(res.redirectTo, { replace: true });
+    // Return to the page that sent the user here (for example a course's Buy button).
+    if (res.success) navigate(from || res.redirectTo, { replace: true });
     else setError(res.message || "Invalid mobile number or password.");
   };
 
@@ -131,7 +137,7 @@ export default function Login() {
       verificationToken,
       name: name.trim(),
     });
-    if (res.success) navigate(res.redirectTo, { replace: true });
+    if (res.success) navigate(from || res.redirectTo, { replace: true });
     else setError(res.message || "Unable to create your account.");
   };
 
@@ -142,7 +148,7 @@ export default function Login() {
     if (res.success) {
       setStep("forgot-otp");
       setOtp("");
-      setResendCountdown(30);
+      setResendCountdown(OTP_RESEND_SECONDS);
       setInfo(res.message || "Password reset OTP sent.");
     } else {
       setError(res.message || "Unable to send reset OTP.");
@@ -198,8 +204,18 @@ export default function Login() {
 
   return (
     <div className="relative min-h-[80vh] overflow-hidden">
-      <div className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-mint blob opacity-60" />
-      <div className="pointer-events-none absolute -right-16 bottom-10 h-72 w-72 rounded-full bg-leaf/20 blob opacity-50" />
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-20 top-10 h-64 w-64 rounded-full bg-mint opacity-60"
+        animate={{ x: [0, 18, -14, 0], y: [0, -22, 10, 0], scale: [1, 1.08, 0.94, 1] }}
+        transition={{ duration: 12, ease: "easeInOut", repeat: Infinity }}
+      />
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 bottom-10 h-72 w-72 rounded-full bg-leaf/20 opacity-50"
+        animate={{ x: [0, -18, 14, 0], y: [0, -22, 10, 0], scale: [1, 1.08, 0.94, 1] }}
+        transition={{ duration: 12, ease: "easeInOut", repeat: Infinity }}
+      />
 
       <div className="relative mx-auto flex max-w-lg flex-col items-center px-4 py-16">
         <motion.div
@@ -247,9 +263,10 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading || mobile.length !== 10}
-                  className="btn-shine w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
+                  className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? "Checking…" : "Continue"}
+                  <Shine />
+                  <RollText>{loading ? "Checking…" : "Continue"}</RollText>
                 </button>
               </motion.form>
             ) : null}
@@ -289,9 +306,10 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading || !password}
-                  className="btn-shine w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
+                  className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? "Logging in…" : "Login"}
+                  <Shine />
+                  <RollText>{loading ? "Logging in…" : "Login"}</RollText>
                 </button>
                 <button type="button" onClick={handleForgotPassword} disabled={loading} className="w-full text-center text-sm font-semibold text-forest hover:underline disabled:opacity-50">
                   Forgot password?
@@ -356,9 +374,10 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading || otp.length !== 6}
-                  className="btn-shine w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
+                  className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? "Verifying…" : "Verify OTP"}
+                  <Shine />
+                  <RollText>{loading ? "Verifying…" : "Verify OTP"}</RollText>
                 </button>
                 <button
                   type="button"
@@ -412,9 +431,10 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading || password.length < 8 || password !== confirmPassword}
-                  className="btn-shine w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
+                  className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? "Please wait…" : step === "password" ? "Create Account" : "Reset Password"}
+                  <Shine />
+                  <RollText>{loading ? "Please wait…" : step === "password" ? "Create Account" : "Reset Password"}</RollText>
                 </button>
               </motion.form>
             ) : null}
