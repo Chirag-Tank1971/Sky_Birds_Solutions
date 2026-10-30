@@ -41,10 +41,11 @@ const getCoursePrice = (course) => {
 const findActiveCourse = async (courseId) => {
   const id = String(courseId || "").slice(0, 120);
   if (!id) return null;
+  // Only live and private courses can be bought.
   const course =
-    (await Course.findOne({ id, isActive: true })) ||
+    (await Course.findOne({ id })) ||
     (/^[a-f\d]{24}$/i.test(id) ? await Course.findById(id) : null);
-  return course && course.isActive !== false ? course : null;
+  return course && Course.isPurchasable(course) ? course : null;
 };
 
 const hmacHex = (secret, data) => crypto.createHmac("sha256", secret).update(data).digest("hex");

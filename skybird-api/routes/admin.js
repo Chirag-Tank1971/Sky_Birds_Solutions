@@ -10,6 +10,9 @@ const {
   uploadThumbnail,
   uploadVideo,
   getVideoProcessingStatus,
+  createBunnyUpload,
+  getBunnyVideoStatus,
+  getBunnyPreview,
   createPlatform,
   updatePlatform,
   deletePlatform,
@@ -20,6 +23,10 @@ const {
   getAllCoursesAdmin,
   addVideoToCourse,
   removeVideoFromCourse,
+  setCourseStatus,
+  getCourseAdmin,
+  updateLesson,
+  reorderLessons,
   getAllCustomers,
   getCustomerById,
   updateCustomer,
@@ -75,6 +82,10 @@ router.delete("/testimonials/:id", deleteTestimonial);
 router.post("/upload/thumbnail", memoryUpload.single("thumbnail"), uploadThumbnail);
 router.post("/upload/video", upload.single("video"), uploadVideo);
 router.get("/videos/:videoId/status", getVideoProcessingStatus);
+// Bunny Stream lesson videos: signed direct upload, encoding status, signed preview link.
+router.post("/videos/bunny/uploads", createBunnyUpload);
+router.get("/videos/bunny/:videoId/status", getBunnyVideoStatus);
+router.post("/videos/bunny/:videoId/preview", getBunnyPreview);
 
 // Short-lived, admin-only authorization for previewing a private HLS upload.
 router.post("/videos/:videoId/preview-token", (req, res) => {
@@ -104,6 +115,7 @@ router.put("/platforms/:id", updatePlatform);
 router.delete("/platforms/:id", deletePlatform);
 
 router.get("/courses", getAllCoursesAdmin);
+router.get("/courses/:id", getCourseAdmin);
 router.post(
   "/courses",
   upload.fields([
@@ -122,6 +134,10 @@ router.put(
 );
 router.delete("/courses/:id", deleteCourse);
 router.post("/courses/:id/videos", addVideoToCourse);
+router.patch("/courses/:id/status", setCourseStatus);
+// Registered before "/courses/:id/videos/:videoId" so "order" isn't read as a lesson id.
+router.put("/courses/:id/videos/order", reorderLessons);
+router.put("/courses/:id/videos/:videoId", updateLesson);
 router.delete("/courses/:id/videos/:videoId", removeVideoFromCourse);
 
 router.get("/customers", getAllCustomers);

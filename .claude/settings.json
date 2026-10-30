@@ -125,10 +125,35 @@
       "Bash(grep -v \"^$\\\\|problems\")",
       "Bash(node -e 'let s=\"\";process.stdin.on\\(\"data\",d=>s+=d\\).on\\(\"end\",\\(\\)=>{for\\(const f of JSON.parse\\(s\\)\\)for\\(const m of f.messages\\)console.log\\(f.filePath.split\\(/src[\\\\\\\\/]/\\)[1]+\":\"+m.line+\"  \"+m.ruleId+\"  \"+m.message.slice\\(0,70\\)\\)}\\)')",
       "Bash(node -e 'let s=\"\";process.stdin.on\\(\"data\",d=>s+=d\\).on\\(\"end\",\\(\\)=>{for\\(const f of JSON.parse\\(s\\)\\)for\\(const m of f.messages\\)console.log\\(f.filePath.replace\\(/.*[\\\\\\\\/]src[\\\\\\\\/]/,\"\"\\)+\":\"+m.line+\"  \"+m.message.slice\\(0,60\\)\\)}\\)')",
-      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/remove-unused.js\" .)"
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/remove-unused.js\" .)",
+      "WebFetch(domain:bunny.net)",
+      "Bash(printf '\\\\n\\\\n# --- Bunny Stream \\(video hosting\\) ---\\\\nBUNNY_COURSES_LIBRARY_ID=\\\\nBUNNY_COURSES_API_KEY=\\\\nBUNNY_COURSES_TOKEN_KEY=\\\\nBUNNY_TESTIMONIALS_LIBRARY_ID=\\\\nBUNNY_TESTIMONIALS_API_KEY=\\\\n' >> .env && tail -7 .env)",
+      "Bash(node -e 'require\\(\"dotenv\"\\).config\\(\\); for \\(const k of [\"BUNNY_COURSES_LIBRARY_ID\",\"BUNNY_COURSES_API_KEY\",\"BUNNY_COURSES_TOKEN_KEY\"]\\) { const v=\\(process.env[k]||\"\"\\); console.log\\(k.padEnd\\(28\\), v ? `${v.length} chars${/[\\\\s\"\\\\x27]/.test\\(v\\)?\" \\(has spaces/quotes!\\)\":\"\"}${k.endsWith\\(\"_ID\"\\)?\" = \"+v:\"\"}` : \"EMPTY\"\\); }')",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-admin-bunny.js\" controllers/adminController.js)",
+      "Bash(npm view *)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-courseform.js\" src/pages/CourseForm.jsx)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-protectedvideo.js\" src/components/ProtectedVideo.jsx)",
+      "Bash(node -e 'require\\(\"dotenv\"\\).config\\(\\); console.log\\(require\\(\"path\"\\).resolve\\(process.env.VIDEO_STORAGE_PATH||\"private-videos\"\\)\\)')",
+      "Bash(ls \"$\\(node -e 'require\\(\"dotenv\"\\).config\\(\\); console.log\\(require\\(\"path\"\\).resolve\\(process.env.VIDEO_STORAGE_PATH||\"private-videos\"\\)\\)'\\)/hls\")",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-polling.js\" src/pages/CourseForm.jsx)",
+      "Bash(grep -n \"navigate\\(\\\\\"/courses\\\\\"\\)\\\\|navigate\\('/courses'\\)\\\\|toast.success\\(\\\\\"Course created\\\\\"\\)\\\\|toast.success\\(\\\\\"Course updated\\\\\"\\)\\\\|const statusOf\\\\|if \\(isEdit\\) {\\\\|    load\\(\\);\\\\|  }, \\\\[id, isEdit\\\\]\\);\" src/pages/CourseForm.jsx)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-draft.js\" src/pages/CourseForm.jsx)",
+      "mcp__plugin_playwright_playwright__browser_handle_dialog",
+      "Bash(cd /d/WORK/Sky_Birds_Solutions/skybird-api && sed -n 448,490p controllers/adminController.js; sed -n 60,80p services/notificationService.js; sed -n 40,50p controllers/paymentController.js; grep -n \"isActive\\\\|status\" ../skybird-admin/src/pages/Courses.jsx | head; wc -l ../skybird-admin/src/pages/Courses.jsx ../skybird-admin/src/pages/CourseForm.jsx)",
+      "Read(//d/WORK/skybird-admin/src/pages/**)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-status-api.js\" .)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-status-admin.js\" .)",
+      "Bash(node -e 'require\\(\"./app\"\\); console.log\\(\"app loads\"\\)')",
+      "Bash(cp src/pages/CourseForm.jsx \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/CourseForm.backup.jsx\")",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-course-flow.js\" src/pages/CourseForm.jsx)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-home-latest.js\" src/pages/Home.jsx)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-upcoming-api.js\" .)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-upcoming-admin.js\" src/pages/CourseForm.jsx)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-upcoming-site.js\" .)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\DELL\\AppData\\Local\\Temp\\claude\\d--WORK-Sky-Birds-Solutions\\f887111b-1a5c-418b-9ceb-305f67738077\\scratchpad"
+      "C:\\Users\\DELL\\AppData\\Local\\Temp\\claude\\d--WORK-Sky-Birds-Solutions\\f887111b-1a5c-418b-9ceb-305f67738077\\scratchpad",
+      "D:\\WORK\\Sky_Birds_Solutions\\skybird-api"
     ]
   },
   "enabledPlugins": {

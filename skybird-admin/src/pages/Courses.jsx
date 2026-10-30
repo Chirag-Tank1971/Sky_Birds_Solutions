@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import API, { assetUrl } from '../api/axios';
 import toast from 'react-hot-toast';
-import { Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Plus, Pencil, Search } from 'lucide-react';
+
+const STATUS_STYLES = {
+  live: 'bg-green-50 text-green-800 border-green-200',
+  upcoming: 'bg-amber-50 text-amber-800 border-amber-200',
+  private: 'bg-blue-50 text-blue-800 border-blue-200',
+  unlive: 'bg-gray-100 text-gray-700 border-gray-200',
+};
+const statusOf = (course) => course.status || (course.isActive === false ? 'unlive' : 'live');
 
 const Courses = () => {
   const [courses, setCourses] = useState([]);
@@ -24,14 +32,13 @@ const Courses = () => {
     fetchCourses();
   }, []);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Deactivate this course?')) return;
+  const changeStatus = async (course, status) => {
     try {
-      await API.delete(`/admin/courses/${id}`);
-      toast.success('Course deactivated');
-      fetchCourses();
+      const { data } = await API.patch(`/admin/courses/${course.id}/status`, { status });
+      setCourses((prev) => prev.map((c) => (c._id === course._id ? { ...c, ...data.data } : c)));
+      toast.success(data.message || 'Status updated');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Delete failed');
+      toast.error(err.response?.data?.message || 'Could not change the status');
     }
   };
 
@@ -123,28 +130,26 @@ const Courses = () => {
                   <td className="px-6 py-4 text-sm text-gray-600">{c.level}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{c.videos?.length || 0}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      c.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {c.isActive ? 'Active' : 'Inactive'}
-                    </span>
+                    <select
+                      value={statusOf(c)}
+                      onChange={(e) => changeStatus(c, e.target.value)}
+                      aria-label={`Status of ${c.title}`}
+                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary-500 ${STATUS_STYLES[statusOf(c)]}`}
+                    >
+                      <option value="live">Live</option>
+                      <option value="upcoming">Upcoming</option>
+                      <option value="private">Private</option>
+                      <option value="unlive">Unlive</option>
+                    </select>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Link
                         to={`/courses/edit/${c.id}`}
-                        className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-primary-50 hover:text-primary-700 transition"
                       >
-                        <Pencil className="w-4 h-4" />
+                        <Pencil className="w-3.5 h-3.5" /> Manage
                       </Link>
-                      {c.isActive && (
-                        <button
-                          onClick={() => handleDelete(c.id)}
-                          className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>

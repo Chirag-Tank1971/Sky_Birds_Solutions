@@ -67,17 +67,18 @@ async function websiteAlerts(admin) {
   const now = Date.now();
 
   // Lesson videos: missing files (wiped disk) or no video attached.
-  const courses = await Course.find({ isActive: true }).select("id title videos").lean();
+  const courses = await Course.find(Course.viewableFilter()).select("id title videos").lean();
   let missingFiles = 0;
   let noVideo = 0;
   const affected = new Set();
   const processing = new Set(listVideoJobs().filter((job) => job.status !== "failed").map((job) => job.videoId));
   for (const course of courses) {
     for (const lesson of course.videos || []) {
+      if (lesson.upcoming) continue;
       if (!lesson.videoId) {
         noVideo += 1;
         affected.add(course.title);
-      } else if (!processing.has(lesson.videoId) && (!validateVideoId(lesson.videoId) || !fs.existsSync(path.join(videoDir(lesson.videoId), "master.m3u8")))) {
+      } else if (lesson.provider !== "bunny" && !processing.has(lesson.videoId) && (!validateVideoId(lesson.videoId) || !fs.existsSync(path.join(videoDir(lesson.videoId), "master.m3u8")))) {
         missingFiles += 1;
         affected.add(course.title);
       }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Lock, PlayCircle } from "lucide-react";
 import PaymentModal from "../components/PaymentModal";
 import { formatPrice } from "../data/courses";
 import { fetchCourseById } from "../api/courses";
@@ -121,7 +122,12 @@ export default function CourseDetail() {
           </p>
           <ul className="mt-4 space-y-2 text-sm text-ink/70">
             <li>{course.duration || "—"} of video</li>
-            <li>{course.lessons || course.videos?.length || 0} lessons</li>
+            <li>
+              {(course.videos || []).filter((video) => !video.upcoming).length || course.lessons || 0} lessons
+              {(course.videos || []).some((video) => video.upcoming)
+                ? ` + ${course.videos.filter((video) => video.upcoming).length} upcoming`
+                : ""}
+            </li>
             <li>{course.level || "Beginner"} level</li>
             <li>Stream only after payment</li>
           </ul>
@@ -133,6 +139,11 @@ export default function CourseDetail() {
               <Shine />
               <RollText>Watch now</RollText>
             </Link>
+          ) : course.status === "upcoming" ? (
+            <div className="mt-6 rounded-2xl bg-mint/60 px-4 py-3 text-center">
+              <p className="font-semibold text-forest">Coming soon</p>
+              <p className="mt-0.5 text-xs text-ink/60">This course isn't open for enrolment yet. Check back soon.</p>
+            </div>
           ) : (
             <button
               type="button"
@@ -156,19 +167,28 @@ export default function CourseDetail() {
             {course.videos.map((video, index) => (
               <div
                 key={video.id || index}
-                className="rounded-xl border border-forest/10 bg-white p-4"
+                className={`relative overflow-hidden rounded-xl border p-4 ${
+                  video.upcoming ? "border-dashed border-forest/20 bg-[#f4f6f2]" : "border-forest/10 bg-white"
+                }`}
               >
-                <p className="text-xs font-semibold text-forest">
-                  Lesson {index + 1}
-                </p>
-                <p className="mt-1 font-semibold">{video.title}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-forest">Lesson {index + 1}</p>
+                  {video.upcoming ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                      <Lock size={11} /> Upcoming
+                    </span>
+                  ) : null}
+                </div>
+                <p className={`mt-1 font-semibold ${video.upcoming ? "text-ink/60" : ""}`}>{video.title}</p>
                 <p className="mt-2 text-xs text-ink/50">{video.duration}</p>
-                {owned ? (
+                {video.upcoming ? (
+                  <p className="mt-3 text-xs font-medium text-ink/45">Unlocks soon</p>
+                ) : owned ? (
                   <Link
                     to={`/watch/${course.id}?v=${video.id}`}
                     className="mt-3 inline-block text-sm font-semibold text-leaf hover:text-forest"
                   >
-                    Play →
+                    <PlayCircle size={15} className="mr-1 inline -mt-0.5" />Play →
                   </Link>
                 ) : (
                   <p className="mt-3 text-xs text-ink/40">Unlock to watch</p>

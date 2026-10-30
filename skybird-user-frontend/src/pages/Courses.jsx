@@ -46,17 +46,19 @@ export default function Courses() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-12 sm:py-16">
-      <div className="max-w-2xl">
-        <h1 className="text-3xl font-bold text-ink sm:text-4xl">
+      <div className="mx-auto max-w-2xl text-center">
+        <h1 className="text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
           E-Commerce Growth Masterclasses
         </h1>
-        <p className="mt-3 text-ink/70 text-base leading-relaxed">
+        <p className="mt-4 text-base leading-relaxed text-ink/65">
           Practical video training for online marketplace sellers.
           Learn step-by-step strategies for product launch, rank boosting, and ads management.
         </p>
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-2.5">
+      {/* Segmented filter, centred */}
+      <div className="mt-10 flex justify-center">
+        <div className="flex max-w-full gap-1.5 overflow-x-auto rounded-full bg-black/[0.05] p-1.5">
         <FilterChip
           active={platform === "all"}
           onClick={() => setPlatform("all")}
@@ -72,6 +74,7 @@ export default function Courses() {
             {item.name}
           </FilterChip>
         ))}
+        </div>
       </div>
 
       {loading ? (
@@ -96,7 +99,7 @@ export default function Courses() {
           <p className="text-xs mt-1 text-ink/50">Check back soon for new seller training batches!</p>
         </div>
       ) : (
-        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((course) => (
             <div key={course.id || course._id}>
               <CourseCard course={course} />
@@ -113,10 +116,11 @@ function FilterChip({ active, onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all capitalize ${
+      aria-pressed={active}
+      className={`shrink-0 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold capitalize transition-colors ${
         active
-          ? "bg-leaf text-white shadow-sm"
-          : "bg-mint/80 text-forest hover:bg-leaf/20"
+          ? "bg-[#10251D] text-white shadow-sm"
+          : "text-ink/75 hover:bg-white hover:text-ink"
       }`}
     >
       {children}

@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Lock,
   PlayCircle,
   Video,
 } from "lucide-react"
@@ -132,7 +133,9 @@ export default function Watch() {
   if (course.videos?.length) {
     // An unknown or missing lesson id opens the first lesson.
     selectedVideo =
-      (videoId && course.videos.find((v) => v.id === videoId)) || course.videos[0]
+      (videoId && course.videos.find((v) => v.id === videoId)) ||
+      course.videos.find((v) => !v.upcoming) ||
+      course.videos[0]
   }
 
   const title = selectedVideo?.title || course.title
@@ -245,11 +248,13 @@ export default function Watch() {
                 </div>
 
                 <h2 className="mt-5 text-lg font-bold text-ink">
-                  No video available
+                  {selectedVideo?.upcoming ? "This lesson is coming soon" : "No video available"}
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  No video is available for this course yet.
+                  {selectedVideo?.upcoming
+                    ? "It will unlock here automatically once it's published. Meanwhile, continue with the available lessons."
+                    : "No video is available for this course yet."}
                 </p>
               </div>
             </div>
@@ -271,7 +276,8 @@ export default function Watch() {
               </div>
 
               <p className="text-xs font-medium text-slate-500">
-                {course.videos.length} lessons available
+                {course.videos.filter((v) => !v.upcoming).length} lessons available
+                {course.videos.some((v) => v.upcoming) ? ` · ${course.videos.filter((v) => v.upcoming).length} upcoming` : ""}
               </p>
             </div>
 
@@ -279,6 +285,27 @@ export default function Watch() {
               <div className="divide-y divide-gray-100">
                 {course.videos.map((v, i) => {
                   const isActive = selectedVideo?.id === v.id
+
+                  if (v.upcoming) {
+                    return (
+                      <div
+                        key={v.id || i}
+                        className="flex items-center gap-3 bg-[#f8faf6] px-4 py-4 sm:px-5"
+                        aria-disabled="true"
+                      >
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gray-100 text-slate-400">
+                          <Lock size={16} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-ink/55">{v.title}</p>
+                          <p className="mt-1 text-[11px] font-medium text-slate-400">Unlocks soon</p>
+                        </div>
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                          <Lock size={11} /> Upcoming
+                        </span>
+                      </div>
+                    )
+                  }
 
                   return (
                     <Link

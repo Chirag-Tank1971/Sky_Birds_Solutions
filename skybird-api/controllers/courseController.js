@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const Course = require("../models/Course");
+const bunnyStream = require("../services/bunnyStream");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
 const { createPlaybackToken } = require("../services/playbackService");
@@ -30,28 +31,36 @@ const verifyAuthUser = async (req) => {
 exports.getAllCourses = async (req, res) => {
   try {
     const { platform, level, search } = req.query;
-    const filter = { isActive: true };
+    // Catalogue shows live and upcoming courses.
+    const filter = { $and: [Course.listedFilter()] };
 
     // String() stops values like ?level[$ne]=x being treated as query operators.
     if (platform && platform !== "all") filter.platform = String(platform);
     if (level) filter.level = String(level);
     if (search) {
       const safeSearch = String(search).slice(0, 80).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      filter.$or = [
-        { title: { $regex: safeSearch, $options: "i" } },
-        { description: { $regex: safeSearch, $options: "i" } },
-      ];
+      filter.$and.push({
+        $or: [
+          { title: { $regex: safeSearch, $options: "i" } },
+          { description: { $regex: safeSearch, $options: "i" } },
+        ],
+      });
     }
 
     const courses = await Course.find(filter).sort({ createdAt: -1 }).lean();
     const safeCourses = courses.map((course) => ({
       ...course,
+      status: Course.statusOf(course),
       videoUrl: "",
       videos: (course.videos || []).map((video) => ({
         id: video.id,
         title: video.title,
         duration: video.duration || "",
-        videoId: video.videoId || "",
+        videoId: video.upcoming ? "" : video.videoId || "",
+
+        upcoming: Boolean(video.upcoming),
+
+        provider: video.provider || "local",
       })),
     }));
 
@@ -71,20 +80,26 @@ exports.getAllCourses = async (req, res) => {
 exports.getCourseById = async (req, res) => {
   try {
     const requestedId = String(req.params.id || "").slice(0, 120);
-    let course = await Course.findOne({ id: requestedId, isActive: true }).lean();
+    // Live, upcoming and private (direct link) courses open; unlive ones don't.
+    let course = await Course.findOne({ id: requestedId, ...Course.viewableFilter() }).lean();
     if (!course && /^[a-f\d]{24}$/i.test(requestedId)) course = await Course.findById(requestedId).lean();
 
-    if (!course || !course.isActive) {
+    if (!course || !Course.isViewable(course)) {
       return res.status(404).json({ success: false, message: "Course not found" });
     }
 
     // Never expose legacy link/videoUrl values to customer-facing clients.
     course.videoUrl = "";
+    course.status = Course.statusOf(course);
     course.videos = (course.videos || []).map((video) => ({
       id: video.id,
       title: video.title,
       duration: video.duration || "",
-      videoId: video.videoId || "",
+      videoId: video.upcoming ? "" : video.videoId || "",
+
+      upcoming: Boolean(video.upcoming),
+
+      provider: video.provider || "local",
     }));
 
     res.status(200).json({ success: true, data: course });
@@ -100,8 +115,9 @@ exports.createPlaybackAuthorization = async (req, res) => {
 
     const { id, videoId } = req.params;
     const safeId = String(id || "").slice(0, 120);
-    const course = await Course.findOne({ id: safeId, isActive: true }) || (/^[a-f\d]{24}$/i.test(safeId) ? await Course.findById(safeId) : null);
-    if (!course || !course.isActive) return res.status(404).json({ success: false, message: "Course not found" });
+    // Buyers keep access in every status (even unlive); the purchase check below decides.
+    const course = await Course.findOne({ id: safeId }) || (/^[a-f\d]{24}$/i.test(safeId) ? await Course.findById(safeId) : null);
+    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
 
     if (auth.role !== "admin") {
       const owned = auth.user.purchasedCourses.some(
@@ -111,8 +127,16 @@ exports.createPlaybackAuthorization = async (req, res) => {
     }
 
     const lesson = (course.videos || []).find((v) => v.id === videoId);
+    if (lesson?.upcoming) return res.status(403).json({ success: false, message: "This lesson is coming soon." });
     const secureVideoId = lesson?.videoId || (course.videos?.length === 0 ? "" : null);
     if (!secureVideoId) return res.status(404).json({ success: false, message: "Video not found for this course" });
+
+    // Bunny Stream lessons play in Bunny's embed player through a short-lived signed link.
+    if (lesson?.provider === "bunny") {
+      if (!bunnyStream.isConfigured()) return res.status(503).json({ success: false, message: "Video service is not available" });
+      res.set("Cache-Control", "private, no-store");
+      return res.status(200).json({ success: true, provider: "bunny", ...bunnyStream.embedUrl(secureVideoId) });
+    }
 
     const token = createPlaybackToken({
       userId: auth.user._id.toString(),

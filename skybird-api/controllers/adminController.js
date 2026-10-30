@@ -5,6 +5,7 @@ const Contact = require("../models/Contact");
 const Payment = require("../models/Payment");
 const Testimonial = require("../models/Testimonial");
 const crypto = require("crypto");
+const bunnyStream = require("../services/bunnyStream");
 const { isConfigured, uploadStream } = require("../config/cloudinary");
 const { processVideo, enqueueVideo, getVideoStatus, deleteVideoFiles, cleanupTempFile, validateVideoId } = require("../services/videoService");
 const { rejectOversizedThumbnail } = require("../middleware/upload");
@@ -24,8 +25,21 @@ const deleteUnusedVideos = async (videoIds) => {
       Course.exists({ "videos.videoId": videoId }),
       Testimonial.exists({ videoId }),
     ]);
-    if (!inCourse && !inTestimonial) deleteVideoFiles(videoId);
+    if (inCourse || inTestimonial) continue;
+    deleteVideoFiles(videoId);
+    if (bunnyStream.isConfigured()) {
+      await bunnyStream.deleteVideo(videoId).catch((err) => console.error("Bunny video delete failed:", err.message));
+    }
   }
+};
+
+// Live and private courses can be bought, so they need at least one lesson with a video.
+const statusProblem = (status, videos) => {
+  if (!Course.COURSE_STATUSES.includes(status)) return "Invalid course status";
+  if ((status === "live" || status === "private") && !(videos || []).some((video) => video.videoId && !video.upcoming)) {
+    return "Add at least one published lesson with a video before making the course live or private.";
+  }
+  return null;
 };
 
 const videoIdsOf = (videos) => (videos || []).map((video) => video.videoId).filter(Boolean);
@@ -98,6 +112,37 @@ exports.uploadVideo = async (req, res) => {
     if (req.file?.path) cleanupTempFile(req.file.path);
     return res.status(500).json({ success: false, message: "Failed to process video" });
   }
+};
+
+// Bunny Stream: create the video and return a signed, resumable (TUS) upload for the admin browser.
+exports.createBunnyUpload = async (req, res) => {
+  try {
+    if (!bunnyStream.isConfigured()) {
+      return res.status(503).json({ success: false, message: "Bunny Stream is not configured on the server" });
+    }
+    const upload = await bunnyStream.createUpload(req.body?.title);
+    return res.status(201).json({ success: true, provider: "bunny", ...upload });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : "Failed to start the upload" });
+  }
+};
+
+exports.getBunnyVideoStatus = async (req, res) => {
+  try {
+    if (!validateVideoId(req.params.videoId)) return res.status(404).json({ success: false, message: "Video not found" });
+    const status = await bunnyStream.getStatus(req.params.videoId);
+    return res.status(200).json({ success: true, videoId: req.params.videoId, ...status });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.statusCode === 404 ? "Video not found" : "Unable to check video status" });
+  }
+};
+
+exports.getBunnyPreview = (req, res) => {
+  if (!bunnyStream.isConfigured() || !validateVideoId(req.params.videoId)) {
+    return res.status(404).json({ success: false, message: "Video not found" });
+  }
+  res.set("Cache-Control", "private, no-store");
+  return res.status(200).json({ success: true, ...bunnyStream.embedUrl(req.params.videoId) });
 };
 
 exports.getVideoProcessingStatus = (req, res) => {
@@ -288,6 +333,9 @@ exports.createCourse = async (req, res) => {
       title: video.title,
       duration: video.duration || "",
       videoId: video.videoId || "",
+      provider: video.provider === "bunny" ? "bunny" : "local",
+
+      upcoming: Boolean(video.upcoming),
       link: "",
     }));
 
@@ -303,6 +351,8 @@ exports.createCourse = async (req, res) => {
       description,
       videoUrl: "",
       videos: parsedVideos,
+      status: "unlive",
+      isActive: false,
     });
 
     res.status(201).json({
@@ -332,7 +382,7 @@ exports.updateCourse = async (req, res) => {
       });
     }
 
-    const allowedFields = ["id", "platform", "title", "price", "duration", "lessons", "level", "thumbnail", "description", "videos", "isActive"];
+    const allowedFields = ["id", "platform", "title", "price", "duration", "lessons", "level", "thumbnail", "description", "videos", "status"];
     const updateData = {};
     for (const field of allowedFields) {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) updateData[field] = req.body[field];
@@ -370,6 +420,9 @@ exports.updateCourse = async (req, res) => {
         title: video.title || "Lesson",
         duration: video.duration || "",
         videoId: video.videoId || "",
+        provider: video.provider === "bunny" ? "bunny" : "local",
+
+        upcoming: Boolean(video.upcoming),
         link: "",
       }));
     }
@@ -380,6 +433,12 @@ exports.updateCourse = async (req, res) => {
       updateData.lessons = updateData.videos.length;
     } else if (updateData.lessons !== undefined) {
       updateData.lessons = Number(updateData.lessons);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "status")) {
+      const problem = statusProblem(updateData.status, updateData.videos || existing.videos);
+      if (problem) return res.status(400).json({ success: false, message: problem });
+      updateData.isActive = updateData.status !== "unlive";
     }
 
     const previousVideoIds = videoIdsOf(existing.videos);
@@ -416,14 +475,14 @@ exports.deleteCourse = async (req, res) => {
   try {
     let course = await Course.findOneAndUpdate(
       { id: req.params.id },
-      { isActive: false },
+      { isActive: false, status: "unlive" },
       { new: true }
     );
 
     if (!course) {
       course = await Course.findByIdAndUpdate(
         req.params.id,
-        { isActive: false },
+        { isActive: false, status: "unlive" },
         { new: true }
       );
     }
@@ -465,8 +524,9 @@ exports.getAllCoursesAdmin = async (req, res) => {
 
 exports.addVideoToCourse = async (req, res) => {
   try {
-    const { title, duration, videoId, link } = req.body;
-    if (!title || (!videoId && !link)) {
+    const { title, duration, videoId, link, provider } = req.body;
+    const upcoming = req.body?.upcoming === true;
+    if (!title || (!videoId && !link && !upcoming)) {
       return res.status(400).json({ success: false, message: "title and videoId are required" });
     }
 
@@ -474,18 +534,21 @@ exports.addVideoToCourse = async (req, res) => {
     if (!course) course = await Course.findById(req.params.id);
     if (!course) return res.status(404).json({ success: false, message: "Course not found" });
 
-    if (!videoId) {
+    if (!videoId && !upcoming) {
       return res.status(400).json({
         success: false,
         message: "Legacy public video links are no longer accepted. Upload/process the video first.",
       });
     }
+    if (videoId && !validateVideoId(videoId)) return res.status(400).json({ success: false, message: "Invalid video" });
 
     course.videos.push({
       id: newLessonId(),
       title,
       duration: duration || "",
-      videoId,
+      videoId: videoId || "",
+      provider: provider === "bunny" ? "bunny" : "local",
+      upcoming,
       link: "",
     });
     course.videoUrl = "";
@@ -495,6 +558,95 @@ exports.addVideoToCourse = async (req, res) => {
     res.status(200).json({ success: true, message: "Video added", data: course });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Full course for the admin editor, in any status (the public endpoint hides unlive courses).
+exports.getCourseAdmin = async (req, res) => {
+  try {
+    const course = await findCourse(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
+    const data = course.toObject();
+    data.status = Course.statusOf(data);
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Unable to load the course" });
+  }
+};
+
+exports.setCourseStatus = async (req, res) => {
+  try {
+    const course = await findCourse(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
+    const status = String(req.body?.status || "");
+    const problem = statusProblem(status, course.videos);
+    if (problem) return res.status(400).json({ success: false, message: problem });
+    course.status = status;
+    course.isActive = status !== "unlive";
+    await course.save();
+    return res.status(200).json({ success: true, message: `Course is now ${status}`, data: course });
+  } catch (error) {
+    console.error("Set course status failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to change the course status" });
+  }
+};
+
+// Rename a lesson or replace its video; the old video is cleaned up if nothing else uses it.
+exports.updateLesson = async (req, res) => {
+  try {
+    const course = await findCourse(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
+    const lesson = course.videos.find((v) => v.id === req.params.videoId);
+    if (!lesson) return res.status(404).json({ success: false, message: "Lesson not found" });
+
+    const { title, duration, videoId, provider } = req.body || {};
+    if (title !== undefined) {
+      const clean = String(title).trim();
+      if (!clean) return res.status(400).json({ success: false, message: "Lesson title is required" });
+      lesson.title = clean.slice(0, 200);
+    }
+    if (duration !== undefined) lesson.duration = String(duration).trim().slice(0, 40);
+    let replaced = null;
+    if (videoId !== undefined && videoId !== lesson.videoId) {
+      if (!validateVideoId(videoId)) return res.status(400).json({ success: false, message: "Invalid video" });
+      replaced = lesson.videoId;
+      lesson.videoId = videoId;
+      lesson.provider = provider === "bunny" ? "bunny" : "local";
+    }
+    if (req.body?.upcoming !== undefined) {
+      const upcoming = req.body.upcoming === true;
+      if (!upcoming && !lesson.videoId) {
+        return res.status(400).json({ success: false, message: "Upload a video before publishing this lesson." });
+      }
+      if (upcoming && ["live", "private"].includes(Course.statusOf(course)) && !course.videos.some((v) => v.id !== lesson.id && v.videoId && !v.upcoming)) {
+        return res.status(400).json({ success: false, message: "A live course needs at least one published lesson." });
+      }
+      lesson.upcoming = upcoming;
+    }
+    await course.save();
+    if (replaced) await deleteUnusedVideos([replaced]);
+    return res.status(200).json({ success: true, message: "Lesson updated", data: course });
+  } catch (error) {
+    console.error("Update lesson failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to update the lesson" });
+  }
+};
+
+exports.reorderLessons = async (req, res) => {
+  try {
+    const course = await findCourse(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
+    const order = Array.isArray(req.body?.order) ? req.body.order.map(String) : null;
+    const ids = course.videos.map((v) => v.id);
+    if (!order || order.length !== ids.length || new Set(order).size !== ids.length || order.some((lessonId) => !ids.includes(lessonId))) {
+      return res.status(400).json({ success: false, message: "The new order must list every lesson exactly once" });
+    }
+    course.videos = order.map((lessonId) => course.videos.find((v) => v.id === lessonId));
+    await course.save();
+    return res.status(200).json({ success: true, message: "Lessons reordered", data: course });
+  } catch (error) {
+    console.error("Reorder lessons failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to reorder lessons" });
   }
 };
 
@@ -512,6 +664,13 @@ exports.removeVideoFromCourse = async (req, res) => {
       });
     }
 
+    const remaining = course.videos.filter((v) => v.id !== req.params.videoId);
+    if (remaining.length === course.videos.length) {
+      return res.status(404).json({ success: false, message: "Lesson not found" });
+    }
+    if (["live", "private"].includes(Course.statusOf(course)) && !remaining.some((v) => v.videoId && !v.upcoming)) {
+      return res.status(400).json({ success: false, message: "Make the course unlive or upcoming before removing its last lesson." });
+    }
     const removedVideoIds = videoIdsOf(course.videos.filter((v) => v.id === req.params.videoId));
     course.videos = course.videos.filter((v) => v.id !== req.params.videoId);
     course.lessons = course.videos.length;
@@ -656,7 +815,7 @@ exports.getStats = async (req, res) => {
       purchaseTotals, revenueTotals, revenue30Totals, revenueByDay, recentPayments, recentCustomers, recentQueries,
     ] = await Promise.all([
       User.countDocuments(ACTIVE),
-      Course.countDocuments({ isActive: true }),
+      Course.countDocuments({ status: "live" }),
       Platform.countDocuments({ isActive: true }),
       User.countDocuments({ ...ACTIVE, isBlocked: true }),
       Contact.countDocuments(),

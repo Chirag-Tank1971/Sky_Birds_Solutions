@@ -530,40 +530,41 @@ export default function Home() {
           whileInView="visible"
           viewport={{ once: true }}
           variants={fadeUp}
-          className="mb-9 flex flex-col justify-between gap-4 border-b border-forest/10 pb-5 sm:flex-row sm:items-end"
+          className="mx-auto mb-12 max-w-5xl text-center"
         >
-          <div>
-
-            <h2 className="mt-2 text-3xl font-extrabold text-ink sm:text-4xl">
-              {home.featured?.title || "Featured Video Courses"}
-            </h2>
-
-            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-700">
-              Explore training designed to help you understand online selling
-              and marketplace operations.
-            </p>
-          </div>
-
-          <Link
-            to="/courses"
-            className="inline-flex items-center gap-2 text-sm font-bold text-forest hover:text-leaf"
-          >
-            <RollText>{home.featured?.buttonLabel || "See all courses"}</RollText>
-            <ArrowRight size={16} />
-          </Link>
+          {(() => {
+            // The thumbnail pill sits after the first word of the (editable) section title.
+            const [firstWord, ...restWords] = (home.featured?.title || "Latest Courses").split(" ");
+            return (
+              <h2 className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-4xl font-extrabold tracking-tight text-ink sm:text-6xl">
+                <span>{firstWord}</span>
+                <span className="inline-flex h-12 w-24 items-center justify-center overflow-hidden rounded-full bg-[#10251D] shadow-lg ring-4 ring-leaf/20 sm:h-16 sm:w-32">
+                  {featured[0]?.thumbnail ? (
+                    <img src={featured[0].thumbnail} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <img src="/assets/logo1.webp" alt="" className="h-4/5 object-contain" />
+                  )}
+                </span>
+                {restWords.length ? <span>{restWords.join(" ")}</span> : null}
+              </h2>
+            );
+          })()}
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-600">
+            {home.featured?.description || "Practical training to help you understand online selling and marketplace operations."}
+          </p>
         </motion.div>
 
         {loading && featured.length === 0 ? (
           <div
-            className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+            className="grid gap-6 lg:grid-cols-2"
             aria-label="Loading courses"
           >
-            {[0, 1, 2].map((key) => (
+            {[0, 1].map((key) => (
               <div
                 key={key}
                 className="animate-pulse rounded-2xl border border-black/[0.06] bg-white p-4"
               >
-                <div className="h-56 rounded-xl bg-black/[0.06]" />
+                <div className="aspect-[16/10] rounded-xl bg-black/[0.06]" />
                 <div className="mt-4 flex gap-1.5">
                   <div className="h-6 w-20 rounded-full bg-black/[0.06]" />
                   <div className="h-6 w-20 rounded-md bg-black/[0.06]" />
@@ -587,18 +588,30 @@ export default function Home() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.08 }}
-            className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+            className={`grid gap-6 ${featured.length > 1 ? "lg:grid-cols-2" : "mx-auto max-w-2xl"}`}
           >
-            {featured.map((course) => (
+            {featured.slice(0, 2).map((course) => (
               <motion.div
                 key={course.id || course._id}
                 variants={fadeUp}
               >
-                <CourseCard course={course} />
+                <CourseCard course={course} size="lg" />
               </motion.div>
             ))}
           </motion.div>
         )}
+
+        {featured.length > 0 ? (
+          <div className="mt-10 flex justify-center">
+            <Link
+              to="/courses"
+              className="inline-flex items-center gap-2 rounded-full border border-[#10251D]/15 bg-white px-6 py-3 text-sm font-bold text-[#10251D] shadow-sm transition hover:border-leaf hover:text-forest"
+            >
+              <RollText>{home.featured?.buttonLabel || "See all courses"}</RollText>
+              <ArrowRight size={16} />
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       {/* clients */}

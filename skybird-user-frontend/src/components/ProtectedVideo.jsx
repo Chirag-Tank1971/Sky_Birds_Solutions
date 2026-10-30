@@ -19,6 +19,8 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
   const [loadingStream, setLoadingStream] = useState(true);
   const [streamError, setStreamError] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Signed Bunny Stream embed link for lessons hosted on Bunny; empty for legacy HLS lessons.
+  const [embedUrl, setEmbedUrl] = useState("");
  
 
   useEffect(() => {
@@ -133,10 +135,17 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
 
       setLoadingStream(true);
       setStreamError("");
+      setEmbedUrl("");
 
       try {
         const auth = await authorize();
         if (!active) return;
+        // Bunny lessons play in Bunny's player; it signs its own media requests.
+        if (auth.provider === "bunny") {
+          setEmbedUrl(auth.embedUrl);
+          setLoadingStream(false);
+          return;
+        }
         if (!video) throw new Error("Video player is unavailable");
         const streamUrl = streamUrlFor(auth);
 
@@ -266,6 +275,16 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
         onDragStart={(e) => e.preventDefault()}
         style={{ backgroundColor: "#000" }}
       >
+        {embedUrl && (
+          <iframe
+            src={embedUrl}
+            title={title}
+            className="absolute inset-0 h-full w-full border-0"
+            allow="accelerometer; gyroscope; autoplay; encrypted-media"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        )}
+
         {/* Always keep the <video> mounted so the ref is available when auth finishes */}
         <video
           ref={videoRef}
@@ -276,7 +295,7 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
           playsInline
           preload="metadata"
           className={`h-full w-full object-contain ${
-            loadingStream || streamError ? "invisible absolute" : ""
+            loadingStream || streamError || embedUrl ? "invisible absolute" : ""
           }`}
           onContextMenu={(e) => e.preventDefault()}
         />
@@ -312,7 +331,7 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
           <button
             type="button"
             onClick={toggleFullscreen}
-            className="absolute bottom-3 right-3 z-20 rounded-lg bg-black/60 p-2 text-white backdrop-blur hover:bg-black/80"
+            className="absolute right-3 top-3 z-20 rounded-lg bg-black/60 p-2 text-white backdrop-blur hover:bg-black/80"
             aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           >
             {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
@@ -320,7 +339,7 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
         )}
 
         {blocked && (
-          <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 rounded-full bg-red-600/90 px-3 py-1.5 text-xs font-bold text-white backdrop-blur">
+          <div className="absolute left-4 top-4 z-20 flex items-center gap-1.5 rounded-full bg-red-600/90 px-3 py-1.5 text-xs font-bold text-white backdrop-blur">
             <ShieldAlert className="h-3.5 w-3.5" />
             Download shortcut blocked
           </div>
@@ -332,8 +351,7 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
           <h2 className="text-lg font-bold text-ink">{title}</h2>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-ink/60">
             <Lock className="h-3 w-3 text-leaf" />
-            Protected HLS streaming • purchase authorization • short-lived
-            access
+            Protected streaming • purchase authorization • short-lived access
           </p>
         </div>
       </div>
