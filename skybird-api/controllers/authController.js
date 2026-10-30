@@ -114,7 +114,8 @@ const publicUser = (user) => ({ id: user._id, mobile: user.mobile || "", email: 
 // Sends the OTP by email through Resend's REST API.
 async function sendEmailOtp(to, otp, expiresAt, purpose) {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM;
+  // Hosting dashboards often keep pasted quotes, which Resend rejects as an invalid sender.
+  const from = String(process.env.RESEND_FROM || "").trim().replace(/^["']|["']$/g, "").trim();
   if (!apiKey || !from) {
     const error = new Error("Email OTP is not available right now. Please use your mobile number or contact support.");
     error.statusCode = 503;
