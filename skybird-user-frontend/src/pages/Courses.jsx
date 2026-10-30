@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
 import CourseCard from "../components/CourseCard";
 import { fetchCourses, fetchPlatforms } from "../api/courses";
-import { fadeUp, stagger, tap } from "../lib/motion";
 
 export default function Courses() {
   const [platform, setPlatform] = useState("all");

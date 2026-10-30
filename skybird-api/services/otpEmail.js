@@ -15,6 +15,11 @@ const COPY = {
     heading: "Verify your email",
     intro: "Use the code below to finish creating your Sky Birds Solution account.",
   },
+  link: {
+    subject: (otp) => `${otp} is your SkyBirds verification code`,
+    heading: "Verify your email",
+    intro: "Use the code below to add this email address to your Sky Birds Solution account.",
+  },
   reset: {
     subject: (otp) => `${otp} is your SkyBirds password reset code`,
     heading: "Reset your password",

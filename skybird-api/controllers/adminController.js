@@ -2,6 +2,7 @@ const Platform = require("../models/Platform");
 const Course = require("../models/Course");
 const User = require("../models/User");
 const Contact = require("../models/Contact");
+const Payment = require("../models/Payment");
 const Testimonial = require("../models/Testimonial");
 const crypto = require("crypto");
 const { isConfigured, uploadStream } = require("../config/cloudinary");
@@ -579,8 +580,9 @@ exports.updateCustomer = async (req, res) => {
   try {
     const { name, isBlocked } = req.body;
 
-    const customer = await User.findByIdAndUpdate(
-      req.params.id,
+    const customer = await User.findOneAndUpdate(
+      // Past (deleted) customers are read-only.
+      { _id: req.params.id, deletedAt: { $exists: false } },
       { name, isBlocked },
       { new: true, runValidators: true }
     ).select("-__v");
@@ -607,18 +609,28 @@ exports.updateCustomer = async (req, res) => {
 
 exports.deleteCustomer = async (req, res) => {
   try {
-    const customer = await User.findByIdAndDelete(req.params.id);
-
-    if (!customer) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found",
-      });
+    const existing = await User.findById(req.params.id).select("mobile email deletedAt");
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
     }
+    if (existing.deletedAt) {
+      return res.status(409).json({ success: false, message: "This customer has already been deleted" });
+    }
+
+    // Soft delete: keep the record (and its purchase history) as a past user. Freeing mobile/email
+    // lets the person sign up again; passwordChangedAt signs out every existing session.
+    const now = new Date();
+    const archive = { deletedAt: now, passwordChangedAt: now };
+    if (existing.mobile) archive.pastMobile = existing.mobile;
+    if (existing.email) archive.pastEmail = existing.email;
+    await User.updateOne(
+      { _id: existing._id, deletedAt: { $exists: false } },
+      { $set: archive, $unset: { mobile: 1, email: 1, passwordHash: 1, passwordResetJti: 1 } }
+    );
 
     res.status(200).json({
       success: true,
-      message: "Customer deleted",
+      message: "Customer moved to past users",
     });
   } catch (error) {
     res.status(500).json({
@@ -628,19 +640,50 @@ exports.deleteCustomer = async (req, res) => {
   }
 };
 
+// Customers an admin has deleted stay in the database as past users; stats count only current ones.
+const ACTIVE = { deletedAt: { $exists: false } };
+
 exports.getStats = async (req, res) => {
   try {
-    const totalCustomers = await User.countDocuments();
-    const totalCourses = await Course.countDocuments({ isActive: true });
-    const totalPlatforms = await Platform.countDocuments({ isActive: true });
-    const blockedCustomers = await User.countDocuments({ isBlocked: true });
-    const totalQueries = await Contact.countDocuments();
-    const newQueries = await Contact.countDocuments({ status: "new" });
+    const now = Date.now();
+    const since30 = new Date(now - 30 * 24 * 60 * 60 * 1000);
+    // Trend window starts at midnight (server time) 13 days ago, so it covers 14 calendar days.
+    const trendStart = new Date(now - 13 * 24 * 60 * 60 * 1000);
+    trendStart.setHours(0, 0, 0, 0);
 
-    const [purchaseTotals] = await User.aggregate([
-      { $group: { _id: null, total: { $sum: { $size: { $ifNull: ["$purchasedCourses", []] } } } } },
+    const [
+      totalCustomers, totalCourses, totalPlatforms, blockedCustomers, totalQueries, newQueries, newCustomers30d,
+      purchaseTotals, revenueTotals, revenue30Totals, revenueByDay, recentPayments, recentCustomers, recentQueries,
+    ] = await Promise.all([
+      User.countDocuments(ACTIVE),
+      Course.countDocuments({ isActive: true }),
+      Platform.countDocuments({ isActive: true }),
+      User.countDocuments({ ...ACTIVE, isBlocked: true }),
+      Contact.countDocuments(),
+      Contact.countDocuments({ status: "new" }),
+      User.countDocuments({ ...ACTIVE, createdAt: { $gte: since30 } }),
+      User.aggregate([{ $group: { _id: null, total: { $sum: { $size: { $ifNull: ["$purchasedCourses", []] } } } } }]),
+      Payment.aggregate([{ $match: { status: "paid" } }, { $group: { _id: null, total: { $sum: "$finalAmount" }, count: { $sum: 1 } } }]),
+      Payment.aggregate([{ $match: { status: "paid", paidAt: { $gte: since30 } } }, { $group: { _id: null, total: { $sum: "$finalAmount" }, count: { $sum: 1 } } }]),
+      Payment.aggregate([
+        { $match: { status: "paid", paidAt: { $gte: trendStart } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$paidAt", timezone: "Asia/Kolkata" } }, total: { $sum: "$finalAmount" }, count: { $sum: 1 } } },
+      ]),
+      Payment.find({ status: "paid" }).sort({ paidAt: -1 }).limit(6)
+        .select("courseTitle finalAmount paidAt userMobile user couponCode")
+        .populate("user", "name email mobile").lean(),
+      User.find(ACTIVE).sort({ createdAt: -1 }).limit(5).select("name mobile email profession createdAt").lean(),
+      Contact.find({ status: "new" }).sort({ createdAt: -1 }).limit(4).select("name subject createdAt").lean(),
     ]);
-    const totalPurchases = purchaseTotals?.total || 0;
+
+    // Fill every day of the window so the chart has no gaps.
+    const byDay = new Map(revenueByDay.map((d) => [d._id, d]));
+    const revenueTrend = Array.from({ length: 14 }, (_, i) => {
+      const day = new Date(trendStart.getTime() + i * 24 * 60 * 60 * 1000);
+      const key = day.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      const hit = byDay.get(key);
+      return { date: key, revenue: hit?.total || 0, orders: hit?.count || 0 };
+    });
 
     res.status(200).json({
       success: true,
@@ -649,15 +692,29 @@ exports.getStats = async (req, res) => {
         totalCourses,
         totalPlatforms,
         blockedCustomers,
-        totalPurchases,
+        totalPurchases: purchaseTotals[0]?.total || 0,
         totalQueries,
         newQueries,
+        newCustomers30d,
+        totalRevenue: revenueTotals[0]?.total || 0,
+        paidOrders: revenueTotals[0]?.count || 0,
+        revenue30d: revenue30Totals[0]?.total || 0,
+        orders30d: revenue30Totals[0]?.count || 0,
+        revenueTrend,
+        recentPayments: recentPayments.map((p) => ({
+          id: p._id,
+          courseTitle: p.courseTitle,
+          amount: p.finalAmount,
+          paidAt: p.paidAt,
+          couponCode: p.couponCode || "",
+          customer: p.user?.name || p.user?.email || (p.userMobile ? `+91 ${p.userMobile}` : "Customer"),
+        })),
+        recentCustomers,
+        recentQueries,
       },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("Admin stats failed:", error.message);
+    res.status(500).json({ success: false, message: "Unable to load dashboard stats" });
   }
 };

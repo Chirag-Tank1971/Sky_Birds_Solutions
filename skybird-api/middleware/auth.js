@@ -39,7 +39,7 @@ exports.protectCustomer = async (req, res, next) => {
     }
 
     const user = await User.findById(decoded.id).select("+passwordChangedAt");
-    if (!user) {
+    if (!user || user.deletedAt) {
       return res.status(401).json({
         success: false,
         message: "User not found",

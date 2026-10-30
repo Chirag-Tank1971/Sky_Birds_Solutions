@@ -69,6 +69,22 @@ app.use(
   }),
 );
 app.use(
+  "/api/customer/contact/send-otp",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 3,
+    message: "Too many OTP requests. Please try again later.",
+  }),
+);
+app.use(
+  "/api/customer/contact/verify-otp",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: "Too many OTP attempts. Please try again later.",
+  }),
+);
+app.use(
   "/api/auth/customer/verify-otp",
   rateLimit({
     windowMs: 15 * 60 * 1000,

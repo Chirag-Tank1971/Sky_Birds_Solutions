@@ -55,7 +55,8 @@ const NotificationMenu = () => {
     try {
       const { data: res } = await API.get('/admin/notifications');
       if (res.success) {
-        setData(res.data);
+        // Default every field so a partial response can't crash the whole admin layout.
+        setData({ items: res.data?.items || [], alerts: res.data?.alerts || [], unreadCount: res.data?.unreadCount || 0 });
         setError('');
       }
     } catch (err) {

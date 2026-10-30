@@ -6,12 +6,11 @@ import RollText from "../components/RollText";
 import Shine from "../components/Shine";
 import { CountdownRing, OtpSentAnimation } from "../components/OtpSent";
 import OtpInput from "../components/OtpInput";
+import { EMAIL_RE, PROFESSIONS } from "../data/profile";
+import { initWidget, widgetRetryOtp, widgetSendOtp, widgetVerifyOtp } from "../lib/msg91Widget";
 
 // Matches the API, which allows one OTP per number per minute.
 const OTP_RESEND_SECONDS = 60;
-// Must match PROFESSIONS in skybird-api/controllers/authController.js.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PROFESSIONS = ["Student", "Working professional", "Business owner", "Marketplace seller", "Other"];
 
 export default function Login() {
   const {
@@ -48,6 +47,9 @@ export default function Login() {
   const [sentCount, setSentCount] = useState(0);
   // Bumped on each failed verify to shake the OTP boxes.
   const [otpErrors, setOtpErrors] = useState(0);
+  // MSG91 widget settings when the API sends mobile OTPs through the widget; null otherwise.
+  const [widget, setWidget] = useState(null);
+  const [widgetBusy, setWidgetBusy] = useState(false);
 
   useEffect(() => {
     if (resendCountdown <= 0) return undefined;
@@ -65,6 +67,22 @@ export default function Login() {
   if (isAuthenticated) {
     return <Navigate to={from || (purchasedCourses.length > 0 ? "/dashboard" : "/courses")} replace />;
   }
+
+  // Widget mode: our API has done its checks; MSG91's widget now sends the SMS itself.
+  const startWidget = async (config) => {
+    setWidgetBusy(true);
+    try {
+      await initWidget(config);
+      await widgetSendOtp(mobile);
+      setWidget(config);
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    } finally {
+      setWidgetBusy(false);
+    }
+  };
 
   const handleContinue = async (e) => {
     e.preventDefault();
@@ -86,12 +104,14 @@ export default function Login() {
       setInfo("You already have an account. Sign in with your password.");
       return;
     }
+    if (res.widget && !(await startWidget(res.widget))) return;
+    if (!res.widget) setWidget(null);
 
     setStep("otp");
     setOtp("");
     setPassword("");
     setConfirmPassword("");
-    setInfo(res.message || "OTP sent.");
+    setInfo(res.widget ? "OTP sent to your mobile number." : res.message || "OTP sent.");
     setResendCountdown(OTP_RESEND_SECONDS);
     setSentCount((count) => count + 1);
   };
@@ -110,9 +130,24 @@ export default function Login() {
   };
 
   const handleResendOtp = async () => {
-    if (loading || resendCountdown > 0) return;
+    if (loading || widgetBusy || resendCountdown > 0) return;
     setError("");
     setInfo("");
+    if (widget) {
+      setWidgetBusy(true);
+      try {
+        await widgetRetryOtp();
+        setOtp("");
+        setResendCountdown(OTP_RESEND_SECONDS);
+        setSentCount((count) => count + 1);
+        setInfo("A new OTP has been sent.");
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setWidgetBusy(false);
+      }
+      return;
+    }
     const purpose = step === "forgot-otp" ? "reset" : "register";
     const res = await sendOtp(identifier, purpose);
     if (res.success) {
@@ -133,7 +168,22 @@ export default function Login() {
       return;
     }
     const purpose = step === "forgot-otp" ? "reset" : "register";
-    const res = await verifyOtp({ identifier, otp, name: name.trim(), purpose });
+    // In widget mode MSG91 checks the code and gives us a token for our API to confirm.
+    let accessToken;
+    if (widget) {
+      if (widgetBusy) return;
+      setWidgetBusy(true);
+      try {
+        accessToken = await widgetVerifyOtp(otp);
+      } catch (err) {
+        setOtpErrors((count) => count + 1);
+        setError(err.message);
+        return;
+      } finally {
+        setWidgetBusy(false);
+      }
+    }
+    const res = await verifyOtp({ identifier, ...(accessToken ? { accessToken } : { otp }), name: name.trim(), purpose });
     if (!res.success) {
       setOtpErrors((count) => count + 1);
       setError(res.message || "Invalid OTP");
@@ -193,6 +243,8 @@ export default function Login() {
     }
     const res = await sendOtp(identifier, "reset");
     if (res.success) {
+      if (res.widget && !(await startWidget(res.widget))) return;
+      if (!res.widget) setWidget(null);
       setStep("forgot-otp");
       setOtp("");
       setResendCountdown(OTP_RESEND_SECONDS);
@@ -429,16 +481,16 @@ export default function Login() {
                   {renderInfo}
                   <button
                     type="submit"
-                    disabled={loading || !identifierValid || (mode === "signin" && !password)}
+                    disabled={loading || widgetBusy || !identifierValid || (mode === "signin" && !password)}
                     className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Shine />
                     <RollText>
-                      {mode === "signin" ? (loading ? "Signing in…" : "Sign in") : loading ? "Sending OTP…" : "Send OTP"}
+                      {mode === "signin" ? (loading || widgetBusy ? "Signing in…" : "Sign in") : loading || widgetBusy ? "Sending OTP…" : "Send OTP"}
                     </RollText>
                   </button>
                   {mode === "signin" ? (
-                    <button type="button" onClick={handleForgotPassword} disabled={loading} className="w-full text-center text-sm font-semibold text-forest hover:underline disabled:opacity-50">
+                    <button type="button" onClick={handleForgotPassword} disabled={loading || widgetBusy} className="w-full text-center text-sm font-semibold text-forest hover:underline disabled:opacity-50">
                       Forgot password?
                     </button>
                   ) : null}
@@ -474,10 +526,10 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={handleResendOtp}
-                    disabled={loading || resendCountdown > 0}
+                    disabled={loading || widgetBusy || resendCountdown > 0}
                     className="inline-flex items-center gap-1.5 font-semibold text-forest hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
                   >
-                    {loading ? "Sending…" : resendCountdown > 0 ? (
+                    {loading || widgetBusy ? "Sending…" : resendCountdown > 0 ? (
                       <>
                         Resend in <CountdownRing seconds={resendCountdown} total={OTP_RESEND_SECONDS} />
                       </>
@@ -488,11 +540,11 @@ export default function Login() {
                 {renderError}
                 <button
                   type="submit"
-                  disabled={loading || otp.length !== 6}
+                  disabled={loading || widgetBusy || otp.length !== 6}
                   className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Shine />
-                  <RollText>{loading ? "Verifying…" : "Verify OTP"}</RollText>
+                  <RollText>{loading || widgetBusy ? "Verifying…" : "Verify OTP"}</RollText>
                 </button>
                 <button
                   type="button"
@@ -545,11 +597,11 @@ export default function Login() {
                 {renderInfo}
                 <button
                   type="submit"
-                  disabled={loading || password.length < 8 || password !== confirmPassword}
+                  disabled={loading || widgetBusy || password.length < 8 || password !== confirmPassword}
                   className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Shine />
-                  <RollText>{loading ? "Please wait…" : step === "password" ? "Create Account" : "Reset Password"}</RollText>
+                  <RollText>{loading || widgetBusy ? "Please wait…" : step === "password" ? "Create Account" : "Reset Password"}</RollText>
                 </button>
               </motion.form>
             ) : null}

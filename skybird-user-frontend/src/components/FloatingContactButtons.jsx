@@ -22,13 +22,6 @@ const TelegramIcon = () => (
 );
 
 export default function FloatingContactButtons() {
-  const whatsappHref = WHATSAPP_NUMBER
-    ? `https://wa.me/+917041492302`
-    : "/contact";
-  const telegramHref = TELEGRAM_USERNAME
-    ? `https://t.me/sbsecomlearninghub`
-    : "/contact";
-
   return (
     <div className="fixed bottom-5 right-6 z-[45] flex flex-row items-center gap-2 sm:bottom-7 sm:right-6">
       <motion.a

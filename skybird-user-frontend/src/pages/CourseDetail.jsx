@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import PaymentModal from "../components/PaymentModal";
 import { formatPrice } from "../data/courses";
 import { fetchCourseById } from "../api/courses";
@@ -88,7 +88,7 @@ export default function CourseDetail() {
 
       setPayOpen(false);
       navigate(`/watch/${course.id}`);
-    } catch (err) {
+    } catch {
       setBuyError(
         "Payment may be successful, but course access could not be refreshed. Please reload the page.",
       );

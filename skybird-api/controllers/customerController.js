@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const { parseProfile } = require("../services/profile");
 // Registers the Course model used by populate() below.
 require("../models/Course");
 
@@ -41,11 +42,12 @@ exports.getProfile = async (req, res) => {
 // @route   PUT /api/customer/profile
 exports.updateProfile = async (req, res) => {
   try {
-    const name = typeof req.body?.name === "string" ? req.body.name.trim() : null;
-    if (name === null || name.length > 100 || /[\u0000-\u001F\u007F]/.test(name)) {
-      return res.status(400).json({ success: false, message: "Please provide a valid name (maximum 100 characters)" });
+    // Email and mobile are changed only through OTP verification, never here.
+    const profile = parseProfile(req.body);
+    if (!profile) {
+      return res.status(400).json({ success: false, message: "Please enter your name, an age between 13 and 100, and a profession." });
     }
-    const user = await User.findByIdAndUpdate(req.user._id, { $set: { name } }, { new: true, runValidators: true }).select("-__v");
+    const user = await User.findByIdAndUpdate(req.user._id, { $set: profile }, { new: true, runValidators: true }).select("-__v");
 
     res.status(200).json({
       success: true,

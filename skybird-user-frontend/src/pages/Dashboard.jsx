@@ -3,6 +3,8 @@ import { Link } from "react-router-dom"
 import { formatPrice } from "../data/courses"
 import { useUser } from "../context/UserContext"
 import RollText from "../components/RollText";
+import AccountDetails from "../components/AccountDetails";
+import { ArrowRight, BookOpen, Headset } from "lucide-react";
 
 export default function Dashboard() {
   const { user, purchasedCourses, purchasesStatus, refreshPurchased } = useUser()
@@ -42,17 +44,40 @@ export default function Dashboard() {
           : "Your purchased courses appear here."}
       </p>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <Stat
-          label="Owned courses"
-          value={purchasesStatus === "error" && owned.length === 0 ? "—" : owned.length}
-        />
-        <Stat
-          label="Account"
-          value={user?.mobile ? `+91 ${user.mobile}` : user?.email || "—"}
-          small
-        />
-        <Stat label="Name" value={user?.name || "—"} small />
+      <div className="mt-8 grid items-start gap-5 lg:grid-cols-[1fr_300px]">
+        <AccountDetails />
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="rounded-3xl border border-forest/10 bg-white p-6 shadow-[0_24px_50px_-35px_rgba(16,37,29,0.35)]">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-mint text-forest">
+              <BookOpen className="h-5 w-5" />
+            </span>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-ink/45">Your courses</p>
+            <p className="mt-1 text-4xl font-bold text-ink">
+              {purchasesStatus === "error" && owned.length === 0 ? "—" : owned.length}
+            </p>
+            <p className="mt-1 text-sm text-ink/55">{owned.length === 1 ? "course unlocked" : "courses unlocked"}</p>
+            <Link
+              to="/courses"
+              className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-forest hover:text-leaf"
+            >
+              Browse courses <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="relative overflow-hidden rounded-3xl bg-[#10251D] p-6 text-white">
+            <div className="pointer-events-none absolute -bottom-16 -right-10 h-40 w-40 rounded-full bg-leaf/25 blur-3xl" />
+            <span className="relative grid h-11 w-11 place-items-center rounded-xl bg-white/10 text-leaf">
+              <Headset className="h-5 w-5" />
+            </span>
+            <p className="relative mt-4 text-lg font-bold">Need help?</p>
+            <p className="relative mt-1 text-sm text-white/60">Questions about a course or your account? Our team usually replies the same business day.</p>
+            <Link
+              to="/contact"
+              className="relative mt-5 inline-flex items-center gap-1.5 rounded-full bg-leaf px-4 py-2 text-sm font-semibold text-[#10251D] transition hover:bg-white"
+            >
+              Contact support <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
       </div>
 
       <h2 className="mt-12 text-2xl font-bold">Your courses</h2>
@@ -122,19 +147,6 @@ export default function Dashboard() {
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-function Stat({ label, value, small }) {
-  return (
-    <div className="rounded-2xl border border-forest/10 bg-white p-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
-        {label}
-      </p>
-      <p className={`mt-2 font-bold text-ink ${small ? "text-base" : "text-3xl"}`}>
-        {value}
-      </p>
     </div>
   )
 }

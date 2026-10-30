@@ -3,11 +3,22 @@ import API from '../api/axios';
 import toast from 'react-hot-toast';
 import { Search, Ban, CheckCircle, Trash2, Eye, X } from 'lucide-react';
 
+// Deleted customers are kept as past users; their old mobile/email live in pastMobile/pastEmail.
+const isPast = (c) => Boolean(c.deletedAt);
+const mobileOf = (c) => c.mobile || c.pastMobile || '';
+const emailOf = (c) => c.email || c.pastEmail || '';
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'past', label: 'Past users' },
+];
+
 const Customers = () => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
+  const [filter, setFilter] = useState('all');
 
   const fetchCustomers = async () => {
     try {
@@ -37,10 +48,10 @@ const Customers = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Permanently delete this customer?')) return;
+    if (!window.confirm('Delete this customer? They will be signed out, can no longer log in, and will be listed as a past user.')) return;
     try {
       await API.delete(`/admin/customers/${id}`);
-      toast.success('Customer deleted');
+      toast.success('Customer moved to past users');
       setSelected(null);
       fetchCustomers();
     } catch (err) {
@@ -48,12 +59,19 @@ const Customers = () => {
     }
   };
 
-  const filtered = customers.filter(
-    (c) =>
-      (c.mobile || '').includes(search) ||
-      (c.name && c.name.toLowerCase().includes(search.toLowerCase())) ||
-      (c.email && c.email.includes(search.toLowerCase()))
-  );
+  const pastCount = customers.filter(isPast).length;
+  const activeCount = customers.length - pastCount;
+  const counts = { all: customers.length, active: activeCount, past: pastCount };
+  const query = search.trim().toLowerCase();
+  const filtered = customers
+    .filter((c) => (filter === 'all' ? true : filter === 'past' ? isPast(c) : !isPast(c)))
+    .filter(
+      (c) =>
+        !query ||
+        mobileOf(c).includes(query) ||
+        (c.name && c.name.toLowerCase().includes(query)) ||
+        emailOf(c).includes(query)
+    );
 
   if (loading) {
     return (
@@ -67,11 +85,30 @@ const Customers = () => {
     <div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
-        <p className="text-gray-500 mt-1">{customers.length} registered customers</p>
+        <p className="text-gray-500 mt-1">
+          {activeCount} active {activeCount === 1 ? 'customer' : 'customers'}
+          {pastCount > 0 && ` · ${pastCount} past ${pastCount === 1 ? 'user' : 'users'}`}
+        </p>
+      </div>
+
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Status filter */}
+      <div className="inline-flex self-start rounded-lg border border-gray-200 bg-white p-1">
+        {FILTERS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              filter === key ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {label} <span className={filter === key ? 'text-white/70' : 'text-gray-400'}>{counts[key]}</span>
+          </button>
+        ))}
       </div>
 
       {/* Search */}
-      <div className="relative mb-6 max-w-md">
+      <div className="relative w-full max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
         <input
           type="text"
@@ -80,6 +117,7 @@ const Customers = () => {
           placeholder="Search by mobile, name or email..."
           className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
         />
+      </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -97,15 +135,15 @@ const Customers = () => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.map((c) => (
-                <tr key={c._id} className="hover:bg-gray-50">
+                <tr key={c._id} className={`hover:bg-gray-50 ${isPast(c) ? 'bg-gray-50/60' : ''}`}>
                   <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-gray-900">{c.name || '—'}</p>
-                    {c.email && <p className="text-xs text-gray-500">{c.email}</p>}
+                    <p className={`text-sm font-medium ${isPast(c) ? 'text-gray-500' : 'text-gray-900'}`}>{c.name || '—'}</p>
+                    {emailOf(c) && <p className="text-xs text-gray-500">{emailOf(c)}</p>}
                     {(c.profession || c.age) && (
                       <p className="text-xs text-gray-400">{[c.profession, c.age && `${c.age} yrs`].filter(Boolean).join(' · ')}</p>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm font-mono text-gray-600">{c.mobile || '—'}</td>
+                  <td className="px-6 py-4 text-sm font-mono text-gray-600">{mobileOf(c) || '—'}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {c.purchasedCourses?.length || 0} courses
                   </td>
@@ -113,11 +151,18 @@ const Customers = () => {
                     {new Date(c.createdAt).toLocaleDateString('en-IN')}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      c.isBlocked ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                    }`}>
-                      {c.isBlocked ? 'Blocked' : 'Active'}
-                    </span>
+                    {isPast(c) ? (
+                      <>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">Past user</span>
+                        <p className="mt-1 text-xs text-gray-400">Deleted {new Date(c.deletedAt).toLocaleDateString('en-IN')}</p>
+                      </>
+                    ) : (
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        c.isBlocked ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                      }`}>
+                        {c.isBlocked ? 'Blocked' : 'Active'}
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -128,6 +173,7 @@ const Customers = () => {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
+                      {!isPast(c) && (<>
                       <button
                         onClick={() => toggleBlock(c)}
                         className={`p-1.5 rounded-lg transition ${
@@ -146,6 +192,7 @@ const Customers = () => {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      </>)}
                     </div>
                   </td>
                 </tr>
@@ -180,13 +227,23 @@ const Customers = () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Mobile</p>
-                  <p className="text-sm font-medium font-mono">{selected.mobile || '—'}</p>
+                  <p className="text-sm font-medium font-mono">{mobileOf(selected) || '—'}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-500 uppercase">Email</p>
+                  <p className="text-sm font-medium break-all">{emailOf(selected) || '—'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Status</p>
-                  <p className={`text-sm font-medium ${selected.isBlocked ? 'text-red-600' : 'text-green-600'}`}>
-                    {selected.isBlocked ? 'Blocked' : 'Active'}
-                  </p>
+                  {isPast(selected) ? (
+                    <p className="text-sm font-medium text-gray-600">
+                      Past user · deleted {new Date(selected.deletedAt).toLocaleDateString('en-IN')}
+                    </p>
+                  ) : (
+                    <p className={`text-sm font-medium ${selected.isBlocked ? 'text-red-600' : 'text-green-600'}`}>
+                      {selected.isBlocked ? 'Blocked' : 'Active'}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Joined</p>

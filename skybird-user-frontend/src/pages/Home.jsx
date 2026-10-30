@@ -10,7 +10,6 @@ import {
   Store,
   Laptop,
   TrendingUp,
-  Users,
   BriefcaseBusiness,
   CheckCircle2,
   CheckCircle,
@@ -22,7 +21,6 @@ import CourseCard from "../components/CourseCard";
 import { fetchCourses, fetchPlatforms } from "../api/courses";
 import { fetchSiteContent } from "../api/site";
 
-import FAQ from "../components/Faq";
 
 import HomeVideo from "../components/HomeVideo";
 import TestimonialVideos from "../components/Home/TestimonialVideos";
@@ -161,19 +159,6 @@ const contentSections = [
   },
 ];
 
-const audiences = [
-  "Who want to explore e-commerce",
-
-  "Students interested in digital business",
-
-  "Entrepreneurs planning to start an online store",
-
-  "Existing sellers who want to improve their knowledge",
-
-  "Professionals seeking new digital skills",
-
-  "Business owners interested in expanding online",
-];
 
 const faqs = [
   {

@@ -45,6 +45,20 @@ const userSchema = new mongoose.Schema(
       select: false,
       default: undefined,
     },
+    // Set when an admin deletes the customer. The record is kept as a "past user": its mobile and
+    // email move to pastMobile/pastEmail so the person can sign up again, and sign-in is refused.
+    deletedAt: {
+      type: Date,
+      default: undefined,
+    },
+    pastMobile: {
+      type: String,
+      default: undefined,
+    },
+    pastEmail: {
+      type: String,
+      default: undefined,
+    },
     isBlocked: {
       type: Boolean,
       default: false,

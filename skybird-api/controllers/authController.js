@@ -5,23 +5,9 @@ const User = require("../models/User");
 const Admin = require("../models/Admin");
 const OtpChallenge = require("../models/OtpChallenge");
 const { otpEmail } = require("../services/otpEmail");
+const { parseProfile } = require("../services/profile");
 
 const OTP_RESEND_INTERVAL_MS = 60 * 1000;
-// Keep in sync with the profession dropdown on the user site's sign-up tab.
-const PROFESSIONS = ["Student", "Working professional", "Business owner", "Marketplace seller", "Other"];
-
-// Returns the cleaned sign-up profile, or null if any field is missing or invalid.
-// The verified mobile number or email comes from the OTP step, not from here.
-function parseSignupProfile(body) {
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const age = Number(body?.age);
-  const profession = typeof body?.profession === "string" ? body.profession.trim() : "";
-  if (name.length < 2 || name.length > 100) return null;
-  if (!Number.isInteger(age) || age < 13 || age > 100) return null;
-  if (!PROFESSIONS.includes(profession)) return null;
-  return { name, age, profession };
-}
-
 const generateToken = (id, role) => {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
     throw new Error("Authentication is not configured securely");
@@ -81,8 +67,9 @@ function sendApiTxtOtp(to, otp, expiresAt) {
         const apiMessage = String(result?.message ?? "").toLowerCase();
         const apiOk = result?.success === true || apiStatus === "200" || apiStatus === "success" || apiMessage === "success";
         if (httpOk && apiOk) return resolve();
-        const error = new Error(`APITxT rejected OTP delivery (HTTP ${response.statusCode || 0}).`);
-        error.statusCode = httpOk ? 502 : 503;
+        // Log APITxT's own reason (bad key, balance, IP or template) for us; customers get a generic 502 message.
+        const error = new Error(`APITxT rejected OTP delivery (HTTP ${response.statusCode || 0}): ${data.slice(0, 300)}`);
+        error.statusCode = 502;
         reject(error);
       });
     });
@@ -93,6 +80,92 @@ function sendApiTxtOtp(to, otp, expiresAt) {
   });
 }
 
+
+// Sends our OTP by SMS through MSG91's OTP API. Without MSG91_TEMPLATE_ID, MSG91 uses its shared
+// default template; set it once your own DLT template is approved to send branded messages.
+async function sendMsg91Otp(to, otp, expiresAt) {
+  const countryCode = String(process.env.MSG91_COUNTRY_CODE || "91").replace(/\D/g, "");
+  const params = new URLSearchParams({
+    mobile: `${countryCode}${to}`,
+    otp,
+    otp_expiry: String(Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60000))),
+  });
+  if (process.env.MSG91_TEMPLATE_ID) params.set("template_id", process.env.MSG91_TEMPLATE_ID.trim());
+
+  let response;
+  let body = "";
+  try {
+    response = await fetch(`https://control.msg91.com/api/v5/otp?${params}`, {
+      method: "POST",
+      headers: { authkey: process.env.MSG91_AUTH_KEY.trim(), accept: "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+    body = await response.text();
+  } catch {
+    const error = new Error("Unable to send the SMS right now. Please try again.");
+    error.statusCode = 503;
+    throw error;
+  }
+  let result = null;
+  try { result = JSON.parse(body); } catch { /* MSG91 replied with non-JSON */ }
+  if (response.ok && String(result?.type).toLowerCase() === "success") {
+    // MSG91's request id lets us find this exact SMS in MSG91 → Reports when delivery fails later.
+    console.log(`MSG91 accepted OTP SMS (request_id ${result.request_id || result.message || "n/a"}, template ${process.env.MSG91_TEMPLATE_ID ? "custom" : "default"})`);
+    return;
+  }
+  // Log MSG91's own reason for us; customers get a generic 502 message.
+  const error = new Error(`MSG91 rejected OTP delivery (HTTP ${response.status}): ${body.slice(0, 300)}`);
+  error.statusCode = 502;
+  throw error;
+}
+
+// MSG91 OTP Widget mode: without DLT, MSG91 sends OTPs only through its widget. The browser runs the widget
+// (sends + checks the code) and gets an access token; we confirm it here and that it was for this number.
+const widgetConfig = () =>
+  process.env.MSG91_AUTH_KEY && process.env.MSG91_WIDGET_ID && process.env.MSG91_WIDGET_TOKEN
+    ? { widgetId: process.env.MSG91_WIDGET_ID.trim(), tokenAuth: process.env.MSG91_WIDGET_TOKEN.trim() }
+    : null;
+
+async function verifyMsg91WidgetToken(id, accessToken) {
+  if (typeof accessToken !== "string" || !accessToken || accessToken.length > 4096) {
+    throw clientError(400, "Invalid verification. Please request a new OTP.");
+  }
+  let response;
+  let body = "";
+  try {
+    response = await fetch("https://control.msg91.com/api/v5/widget/verifyAccessToken", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ authkey: process.env.MSG91_AUTH_KEY.trim(), "access-token": accessToken }),
+      signal: AbortSignal.timeout(10000),
+    });
+    body = await response.text();
+  } catch {
+    const error = new Error("Unable to verify the OTP right now. Please try again.");
+    error.statusCode = 503;
+    throw error;
+  }
+  let result = null;
+  try { result = JSON.parse(body); } catch { /* non-JSON reply */ }
+  // MSG91 answers HTTP 200 even for failures, so require type "success" and the verified number to match.
+  const countryCode = String(process.env.MSG91_COUNTRY_CODE || "91").replace(/\D/g, "");
+  const verified = String(result?.message ?? "").replace(/\D/g, "");
+  if (response.ok && String(result?.type).toLowerCase() === "success" && verified === `${countryCode}${id.value}`) return;
+  console.error(`MSG91 widget token not accepted (HTTP ${response.status}): ${body.slice(0, 300)}`);
+  throw clientError(400, "OTP verification failed. Please request a new OTP.");
+}
+
+// Mobile OTP check: MSG91 widget token when widget mode is on, otherwise our own stored code.
+async function confirmOtp(id, purpose, body) {
+  if (id.field === "mobile" && widgetConfig()) return verifyMsg91WidgetToken(id, body?.accessToken);
+  const otp = String(body?.otp || "").trim();
+  if (!/^\d{6}$/.test(otp)) throw clientError(400, "Please provide a valid mobile number or email and 6-digit OTP");
+  return consumeOtp(id, purpose, otp);
+}
+
+// MSG91 is used when configured; APITxT remains as the fallback SMS provider.
+const sendSmsOtp = (to, otp, expiresAt) =>
+  process.env.MSG91_AUTH_KEY ? sendMsg91Otp(to, otp, expiresAt) : sendApiTxtOtp(to, otp, expiresAt);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -193,6 +266,76 @@ function validPassword(password) {
 const NO_ACCOUNT = "No account found for this mobile number or email.";
 const VERIFY_AGAIN = "Verify your mobile number or email again.";
 
+// Error with a message that is safe to show to the customer.
+function clientError(status, message, extra) {
+  return Object.assign(new Error(message), { statusCode: status, expose: true, extra });
+}
+
+// Rate-limits, stores and delivers a new OTP for this mobile number or email.
+async function deliverOtp(id, purpose) {
+  // At most one OTP per number or email per minute, whatever IP the requests come from.
+  const previous = await OtpChallenge.findOne({ identifier: id.value }).select("createdAt");
+  const waitMs = previous?.createdAt ? OTP_RESEND_INTERVAL_MS - (Date.now() - previous.createdAt.getTime()) : 0;
+  if (waitMs > 0) {
+    const seconds = Math.ceil(waitMs / 1000);
+    throw clientError(429, `Please wait ${seconds} seconds before requesting another OTP.`, { retryAfter: seconds });
+  }
+
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const codeHash = hashOtp(id.value, otp);
+  const expiresAt = new Date(Date.now() + Math.min(10, Math.max(2, Number(process.env.OTP_EXPIRE_MINUTES) || 5)) * 60 * 1000);
+
+  await OtpChallenge.deleteOne({ identifier: id.value });
+  if (id.field === "email") await sendEmailOtp(id.value, otp, expiresAt, purpose);
+  else await sendSmsOtp(id.value, otp, expiresAt);
+  await OtpChallenge.findOneAndUpdate(
+    { identifier: id.value },
+    { $set: { codeHash, purpose, expiresAt, attempts: 0, createdAt: new Date() } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+}
+
+// Checks the OTP and deletes it once used. Throws a clientError if it is wrong, expired or reused.
+async function consumeOtp(id, purpose, otp) {
+  const challenge = await OtpChallenge.findOne({ identifier: id.value, purpose });
+  if (!challenge || challenge.expiresAt <= new Date()) {
+    if (challenge) await OtpChallenge.deleteOne({ _id: challenge._id });
+    throw clientError(400, "OTP expired or not requested. Please request a new OTP.");
+  }
+
+  const attempt = await OtpChallenge.findOneAndUpdate(
+    { _id: challenge._id, attempts: { $lt: 5 }, expiresAt: { $gt: new Date() }, purpose },
+    { $inc: { attempts: 1 } },
+    { new: true }
+  );
+  if (!attempt) {
+    await OtpChallenge.deleteOne({ identifier: id.value, purpose, attempts: { $gte: 5 } });
+    throw clientError(429, "Too many incorrect attempts. Please request a new OTP.");
+  }
+
+  const supplied = Buffer.from(hashOtp(id.value, otp), "hex");
+  const expected = Buffer.from(attempt.codeHash, "hex");
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+    if (attempt.attempts >= 5) await OtpChallenge.deleteOne({ _id: attempt._id });
+    throw clientError(400, "Invalid OTP");
+  }
+
+  const consumed = await OtpChallenge.findOneAndDelete({ _id: attempt._id, codeHash: attempt.codeHash, purpose });
+  if (!consumed) throw clientError(400, "OTP already used. Please request a new OTP.");
+}
+
+// Sends the error response for a failed OTP step without leaking internal details.
+function otpFailure(res, error, logLabel, fallback) {
+  if (error.expose) {
+    if (error.extra?.retryAfter) res.set("Retry-After", String(error.extra.retryAfter));
+    return res.status(error.statusCode).json({ success: false, message: error.message, ...(error.extra || {}) });
+  }
+  const status = Number(error.statusCode) || 503;
+  console.error(`${logLabel}:`, error.message);
+  // Delivery errors marked 503 carry a message written for users; anything else (e.g. a database error) stays in the log.
+  return res.status(status).json({ success: false, message: error.statusCode === 503 ? error.message : fallback });
+}
+
 exports.sendOtp = async (req, res) => {
   try {
     const id = parseIdentifier(req.body);
@@ -210,83 +353,31 @@ exports.sendOtp = async (req, res) => {
       return res.status(404).json({ success: false, message: NO_ACCOUNT });
     }
 
-    // At most one OTP per number or email per minute, whatever IP the requests come from.
-    const previous = await OtpChallenge.findOne({ identifier: id.value }).select("createdAt");
-    const waitMs = previous?.createdAt ? OTP_RESEND_INTERVAL_MS - (Date.now() - previous.createdAt.getTime()) : 0;
-    if (waitMs > 0) {
-      const seconds = Math.ceil(waitMs / 1000);
-      res.set("Retry-After", String(seconds));
-      return res.status(429).json({ success: false, message: `Please wait ${seconds} seconds before requesting another OTP.`, retryAfter: seconds });
-    }
+    // Widget mode: checks passed, so the browser's MSG91 widget sends the SMS itself.
+    const widget = id.field === "mobile" ? widgetConfig() : null;
+    if (widget) return res.status(200).json({ success: true, existingUser: !!existingUser, widget, message: "Sending OTP" });
 
-    const otp = crypto.randomInt(100000, 1000000).toString();
-    const codeHash = hashOtp(id.value, otp);
-    const expiresAt = new Date(Date.now() + Math.min(10, Math.max(2, Number(process.env.OTP_EXPIRE_MINUTES) || 5)) * 60 * 1000);
-
-    await OtpChallenge.deleteOne({ identifier: id.value });
-    if (id.field === "email") await sendEmailOtp(id.value, otp, expiresAt, purpose);
-    else await sendApiTxtOtp(id.value, otp, expiresAt);
-    await OtpChallenge.findOneAndUpdate(
-      { identifier: id.value },
-      { $set: { codeHash, purpose, expiresAt, attempts: 0, createdAt: new Date() } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    await deliverOtp(id, purpose);
     return res.status(200).json({
       success: true,
       message: id.field === "email" ? "OTP sent to your email" : "OTP sent successfully",
       existingUser: !!existingUser,
     });
   } catch (error) {
-    const status = Number(error.statusCode) || 503;
-    console.error("OTP delivery failed:", error.message);
-    return res.status(status).json({
-      success: false,
-      message: status === 503 ? error.message : "Unable to send OTP right now",
-    });
+    return otpFailure(res, error, "OTP delivery failed", "Unable to send OTP right now. Please try again.");
   }
 };
 
 exports.verifyOtp = async (req, res) => {
   try {
     const id = parseIdentifier(req.body);
-    const otp = String(req.body?.otp || "").trim();
     const purpose = req.body?.purpose === "reset" ? "reset" : "register";
     const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 100) : "";
-    if (!id || !/^\d{6}$/.test(otp)) {
+    if (!id) {
       return res.status(400).json({ success: false, message: "Please provide a valid mobile number or email and 6-digit OTP" });
     }
 
-    const challenge = await OtpChallenge.findOne({ identifier: id.value, purpose });
-    if (!challenge || challenge.expiresAt <= new Date()) {
-      if (challenge) await OtpChallenge.deleteOne({ _id: challenge._id });
-      return res.status(400).json({ success: false, message: "OTP expired or not requested. Please request a new OTP." });
-    }
-
-    const attempt = await OtpChallenge.findOneAndUpdate(
-      { _id: challenge._id, attempts: { $lt: 5 }, expiresAt: { $gt: new Date() }, purpose },
-      { $inc: { attempts: 1 } },
-      { new: true }
-    );
-    if (!attempt) {
-      await OtpChallenge.deleteOne({ identifier: id.value, purpose, attempts: { $gte: 5 } });
-      return res.status(429).json({ success: false, message: "Too many incorrect attempts. Please request a new OTP." });
-    }
-
-    const supplied = Buffer.from(hashOtp(id.value, otp), "hex");
-    const expected = Buffer.from(attempt.codeHash, "hex");
-    if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
-      if (attempt.attempts >= 5) await OtpChallenge.deleteOne({ _id: attempt._id });
-      return res.status(400).json({ success: false, message: "Invalid OTP" });
-    }
-
-    const consumed = await OtpChallenge.findOneAndDelete({
-      _id: attempt._id,
-      codeHash: attempt.codeHash,
-      purpose,
-    });
-    if (!consumed) {
-      return res.status(400).json({ success: false, message: "OTP already used. Please request a new OTP." });
-    }
+    await confirmOtp(id, purpose, req.body);
 
     const user = await User.findOne(accountQuery(id)).select("_id isBlocked");
     if (purpose === "register" && user) {
@@ -320,8 +411,54 @@ exports.verifyOtp = async (req, res) => {
       name,
     });
   } catch (error) {
-    console.error("OTP verification failed:", error.message);
-    return res.status(500).json({ success: false, message: "Unable to verify OTP right now" });
+    return otpFailure(res, error, "OTP verification failed", "Unable to verify OTP right now");
+  }
+};
+
+const contactLabel = (id) => (id.field === "email" ? "email address" : "mobile number");
+
+// Signed-in customer adds the contact they did not sign up with (email or mobile), proven by OTP.
+exports.sendContactOtp = async (req, res) => {
+  try {
+    const id = parseIdentifier(req.body);
+    if (!id) return res.status(400).json({ success: false, message: "Enter a valid 10-digit mobile number or email address" });
+    if (req.user[id.field]) {
+      return res.status(400).json({ success: false, message: `Your account already has a ${contactLabel(id)}.` });
+    }
+    if (await User.exists(accountQuery(id))) {
+      return res.status(409).json({ success: false, message: `This ${contactLabel(id)} is already linked to another account.` });
+    }
+    const widget = id.field === "mobile" ? widgetConfig() : null;
+    if (widget) return res.status(200).json({ success: true, widget, message: "Sending OTP" });
+
+    await deliverOtp(id, "link");
+    return res.status(200).json({ success: true, message: id.field === "email" ? "OTP sent to your email" : "OTP sent to your mobile number" });
+  } catch (error) {
+    return otpFailure(res, error, "Contact OTP delivery failed", "Unable to send OTP right now. Please try again.");
+  }
+};
+
+exports.verifyContactOtp = async (req, res) => {
+  try {
+    const id = parseIdentifier(req.body);
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Please provide a valid mobile number or email and 6-digit OTP" });
+    }
+    await confirmOtp(id, "link", req.body);
+
+    // Only fill the field if it is still empty; the unique index rejects it if another account took it meanwhile.
+    const user = await User.findOneAndUpdate(
+      { _id: req.user._id, $or: [{ [id.field]: { $exists: false } }, { [id.field]: null }, { [id.field]: "" }] },
+      { $set: { [id.field]: id.value } },
+      { new: true }
+    );
+    if (!user) return res.status(400).json({ success: false, message: `Your account already has a ${contactLabel(id)}.` });
+    return res.status(200).json({ success: true, message: `${id.field === "email" ? "Email" : "Mobile number"} added to your account`, user: publicUser(user) });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: `This ${contactLabel(parseIdentifier(req.body))} is already linked to another account.` });
+    }
+    return otpFailure(res, error, "Contact OTP verification failed", "Unable to verify OTP right now");
   }
 };
 
@@ -366,7 +503,7 @@ exports.setPassword = async (req, res) => {
     const alreadyExists = await User.findOne(accountQuery(id)).select("_id");
     if (alreadyExists) return res.status(409).json({ success: false, message: "An account already exists. Please sign in or reset your password." });
 
-    const profile = parseSignupProfile(req.body);
+    const profile = parseProfile(req.body);
     if (!profile) {
       return res.status(400).json({ success: false, message: "Please fill in your name, age and profession." });
     }

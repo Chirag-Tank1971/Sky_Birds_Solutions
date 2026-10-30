@@ -14,7 +14,7 @@ const otpChallengeSchema = new mongoose.Schema(
     },
     purpose: {
       type: String,
-      enum: ["register", "reset"],
+      enum: ["register", "reset", "link"],
       default: "register",
       required: true,
     },

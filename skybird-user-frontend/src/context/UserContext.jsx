@@ -83,6 +83,7 @@ export function UserProvider({ children }) {
         success: true,
         message: data.message || "OTP sent",
         existingUser: Boolean(data.existingUser),
+        widget: data.widget || null,
       }
     } catch (err) {
       return {
@@ -94,10 +95,10 @@ export function UserProvider({ children }) {
     }
   }, [])
 
-  const verifyOtp = useCallback(async ({ identifier, otp, name, purpose = "register" }) => {
+  const verifyOtp = useCallback(async ({ identifier, otp, accessToken, name, purpose = "register" }) => {
     setLoading(true)
     try {
-      const data = await apiVerifyOtp({ identifier, otp, name, purpose })
+      const data = await apiVerifyOtp({ identifier, otp, accessToken, name, purpose })
       if (data.success && data.verified && data.verificationToken) {
         return {
           success: true,
@@ -196,6 +197,11 @@ export function UserProvider({ children }) {
     }
   }, [])
 
+  // Merges edited profile fields (name, email, mobile) into the signed-in user.
+  const updateUser = useCallback((fields) => {
+    setUser((prev) => (prev ? { ...prev, ...fields } : prev))
+  }, [])
+
   const logout = useCallback(() => {
     setToken(null)
     setUser(null)
@@ -232,10 +238,11 @@ export function UserProvider({ children }) {
     logout,
     hasCourse,
     refreshPurchased,
+    updateUser,
   }), [
     user, token, isAuthenticated, loading, purchasedCourses, purchasesStatus, sendOtp, verifyOtp,
     loginWithPassword, registerWithPassword, resetPassword, logout, hasCourse,
-    refreshPurchased,
+    refreshPurchased, updateUser,
   ])
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>

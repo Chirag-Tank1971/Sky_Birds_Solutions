@@ -6,10 +6,12 @@ export async function sendOtp(identifier, purpose = "register") {
   return data
 }
 
-export async function verifyOtp({ identifier, otp, name, purpose = "register" }) {
+// accessToken: MSG91 widget token, sent instead of otp when the API runs in widget mode.
+export async function verifyOtp({ identifier, otp, accessToken, name, purpose = "register" }) {
   const { data } = await API.post("/auth/customer/verify-otp", {
     identifier,
     otp,
+    accessToken,
     name,
     purpose,
   })
@@ -44,6 +46,22 @@ export async function resetPassword({ identifier, password, verificationToken })
 
 export async function getProfile() {
   const { data } = await API.get("/customer/profile")
+  return data
+}
+
+export async function updateProfile({ name, age, profession }) {
+  const { data } = await API.put("/customer/profile", { name, age, profession })
+  return data
+}
+
+// Adds the email or mobile number the customer did not sign up with, after an OTP check.
+export async function sendContactOtp(identifier) {
+  const { data } = await API.post("/customer/contact/send-otp", { identifier })
+  return data
+}
+
+export async function verifyContactOtp({ identifier, otp, accessToken }) {
+  const { data } = await API.post("/customer/contact/verify-otp", { identifier, otp, accessToken })
   return data
 }
 
