@@ -50,8 +50,9 @@ const Customers = () => {
 
   const filtered = customers.filter(
     (c) =>
-      c.mobile.includes(search) ||
-      (c.name && c.name.toLowerCase().includes(search.toLowerCase()))
+      (c.mobile || '').includes(search) ||
+      (c.name && c.name.toLowerCase().includes(search.toLowerCase())) ||
+      (c.email && c.email.includes(search.toLowerCase()))
   );
 
   if (loading) {
@@ -76,7 +77,7 @@ const Customers = () => {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by mobile or name..."
+          placeholder="Search by mobile, name or email..."
           className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
         />
       </div>
@@ -99,8 +100,12 @@ const Customers = () => {
                 <tr key={c._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <p className="text-sm font-medium text-gray-900">{c.name || '—'}</p>
+                    {c.email && <p className="text-xs text-gray-500">{c.email}</p>}
+                    {(c.profession || c.age) && (
+                      <p className="text-xs text-gray-400">{[c.profession, c.age && `${c.age} yrs`].filter(Boolean).join(' · ')}</p>
+                    )}
                   </td>
-                  <td className="px-6 py-4 text-sm font-mono text-gray-600">{c.mobile}</td>
+                  <td className="px-6 py-4 text-sm font-mono text-gray-600">{c.mobile || '—'}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {c.purchasedCourses?.length || 0} courses
                   </td>
@@ -175,7 +180,7 @@ const Customers = () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Mobile</p>
-                  <p className="text-sm font-medium font-mono">{selected.mobile}</p>
+                  <p className="text-sm font-medium font-mono">{selected.mobile || '—'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Status</p>

@@ -10,7 +10,6 @@ import {
   Megaphone,
   Headset,
   ShieldCheck,
-  Users,
   ArrowRight,
 } from "lucide-react";
 import { fetchSiteContent } from "../api/site";
@@ -24,7 +23,6 @@ const defaultStats = [
     label: "Revenue Generated Through Brand-Building Work",
     icon: TrendingUp,
   },
-  { value: "500+", label: "Brands Helped Build", icon: Users },
 ];
 
 const defaultServices = [
@@ -485,7 +483,7 @@ export default function About() {
               </p>
             </div>
           </div>
-          <div className="mt-9 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="mt-9 grid gap-4 sm:grid-cols-3">
             {stats.map((item) => {
               const Icon = item.icon;
               return (

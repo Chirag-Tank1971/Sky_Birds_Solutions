@@ -1,9 +1,11 @@
 import { motion } from "motion/react";
-import { Send, Smartphone } from "lucide-react";
+import { Mail, Send, Smartphone } from "lucide-react";
 
 // Short "OTP sent" moment: a message flies into the phone, a check draws in
 // and two ripples pulse out. Finite (no endless loops); remount it to replay.
-export function OtpSentAnimation() {
+// channel: "mobile" (SMS) or "email".
+export function OtpSentAnimation({ channel = "mobile" }) {
+  const Icon = channel === "email" ? Mail : Smartphone;
   return (
     <div className="flex items-center justify-center gap-3.5" role="status">
       <div className="relative grid h-14 w-14 shrink-0 place-items-center">
@@ -24,7 +26,7 @@ export function OtpSentAnimation() {
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", bounce: 0.45, duration: 0.6 }}
         >
-          <Smartphone size={21} strokeWidth={1.8} />
+          <Icon size={21} strokeWidth={1.8} />
 
           {/* Message flies in and lands on the phone */}
           <motion.span
@@ -72,7 +74,7 @@ export function OtpSentAnimation() {
         animate={{ opacity: 1 }}
         transition={{ delay: 1.05, duration: 0.4 }}
       >
-        Check your SMS inbox
+        {channel === "email" ? "Check your email inbox (and spam folder)" : "Check your SMS inbox"}
       </motion.p>
       </div>
     </div>

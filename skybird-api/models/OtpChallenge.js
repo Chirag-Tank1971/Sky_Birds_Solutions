@@ -3,10 +3,10 @@ const mongoose = require("mongoose");
 
 const otpChallengeSchema = new mongoose.Schema(
   {
-    mobile: {
+    // 10-digit mobile number or lowercase email the code was sent to.
+    identifier: {
       type: String,
       required: true,
-      unique: true,
     },
     codeHash: {
       type: String,
@@ -36,5 +36,8 @@ const otpChallengeSchema = new mongoose.Schema(
   },
   { versionKey: false }
 );
+
+// Partial so records written by older API versions (without identifier) never collide.
+otpChallengeSchema.index({ identifier: 1 }, { unique: true, partialFilterExpression: { identifier: { $gt: "" } } });
 
 module.exports = mongoose.model("OtpChallenge", otpChallengeSchema);

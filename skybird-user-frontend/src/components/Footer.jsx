@@ -113,7 +113,7 @@ export default function Footer() {
           }));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       cancelled = true;
@@ -322,7 +322,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="flex flex-col gap-4 border-t border-white/10 py-6 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <p className="text-xs leading-6 text-white/45">
-            © {new Date().getFullYear()} SkyBirds E-Commerce solution. All rights reserved.
+            © {new Date().getFullYear()} SkyBirds solution. All rights reserved.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-white/45 sm:justify-end">

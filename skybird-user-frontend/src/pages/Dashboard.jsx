@@ -37,8 +37,8 @@ export default function Dashboard() {
         Hello, {user?.name || "Learner"}
       </h1>
       <p className="mt-2 text-ink/70">
-        {user?.mobile
-          ? `Logged in with +91 ${user.mobile}`
+        {user?.mobile || user?.email
+          ? `Logged in with ${user.mobile ? `+91 ${user.mobile}` : user.email}`
           : "Your purchased courses appear here."}
       </p>
 
@@ -49,7 +49,7 @@ export default function Dashboard() {
         />
         <Stat
           label="Account"
-          value={user?.mobile ? `+91 ${user.mobile}` : "—"}
+          value={user?.mobile ? `+91 ${user.mobile}` : user?.email || "—"}
           small
         />
         <Stat label="Name" value={user?.name || "—"} small />

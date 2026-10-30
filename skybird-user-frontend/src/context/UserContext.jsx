@@ -75,10 +75,10 @@ export function UserProvider({ children }) {
     refreshPurchased()
   }, [refreshPurchased])
 
-  const sendOtp = useCallback(async (mobile, purpose = "register") => {
+  const sendOtp = useCallback(async (identifier, purpose = "register") => {
     setLoading(true)
     try {
-      const data = await apiSendOtp(mobile, purpose)
+      const data = await apiSendOtp(identifier, purpose)
       return {
         success: true,
         message: data.message || "OTP sent",
@@ -94,10 +94,10 @@ export function UserProvider({ children }) {
     }
   }, [])
 
-  const verifyOtp = useCallback(async ({ mobile, otp, name, purpose = "register" }) => {
+  const verifyOtp = useCallback(async ({ identifier, otp, name, purpose = "register" }) => {
     setLoading(true)
     try {
-      const data = await apiVerifyOtp({ mobile, otp, name, purpose })
+      const data = await apiVerifyOtp({ identifier, otp, name, purpose })
       if (data.success && data.verified && data.verificationToken) {
         return {
           success: true,
@@ -124,7 +124,7 @@ export function UserProvider({ children }) {
     const nextUser = {
       id: data.user.id,
       name: data.user.name || "Learner",
-      mobile: data.user.mobile,
+      mobile: data.user.mobile || "",
       email: data.user.email || "",
       purchasedCourseIds: [],
     }
@@ -151,10 +151,10 @@ export function UserProvider({ children }) {
     return { success: true, user: finalUser, redirectTo: courses.length > 0 ? "/dashboard" : "/courses" }
   }, [])
 
-  const loginWithPassword = useCallback(async ({ mobile, password }) => {
+  const loginWithPassword = useCallback(async ({ identifier, password }) => {
     setLoading(true)
     try {
-      const data = await apiLoginWithPassword({ mobile, password })
+      const data = await apiLoginWithPassword({ identifier, password })
       return await completeLogin(data)
     } catch (err) {
       return {
@@ -166,10 +166,10 @@ export function UserProvider({ children }) {
     }
   }, [completeLogin])
 
-  const registerWithPassword = useCallback(async ({ mobile, password, verificationToken, name }) => {
+  const registerWithPassword = useCallback(async ({ identifier, password, verificationToken, name, age, profession }) => {
     setLoading(true)
     try {
-      const data = await apiSetPassword({ mobile, password, verificationToken, name })
+      const data = await apiSetPassword({ identifier, password, verificationToken, name, age, profession })
       return await completeLogin(data)
     } catch (err) {
       return {
@@ -181,10 +181,10 @@ export function UserProvider({ children }) {
     }
   }, [completeLogin])
 
-  const resetPassword = useCallback(async ({ mobile, password, verificationToken }) => {
+  const resetPassword = useCallback(async ({ identifier, password, verificationToken }) => {
     setLoading(true)
     try {
-      const data = await apiResetPassword({ mobile, password, verificationToken })
+      const data = await apiResetPassword({ identifier, password, verificationToken })
       return { success: Boolean(data.success), message: data.message || "Password reset successfully" }
     } catch (err) {
       return {

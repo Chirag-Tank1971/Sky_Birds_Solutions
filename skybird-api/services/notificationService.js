@@ -14,7 +14,11 @@ const COUPON_EXPIRY_WARNING_DAYS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const rupees = (amount) => `₹${Number(amount || 0).toLocaleString("en-IN")}`;
-const customerLabel = (name, mobile) => (name ? `${name} (+91 ${mobile})` : `+91 ${mobile}`);
+// Customers sign up with a mobile number or an email.
+const customerLabel = (name, mobile, email) => {
+  const contact = mobile ? `+91 ${mobile}` : email || "";
+  return name ? `${name} (${contact})` : contact;
+};
 
 // Things that happened recently: new queries, purchases and sign-ups.
 async function recentActivity(since) {
@@ -22,7 +26,7 @@ async function recentActivity(since) {
     Contact.find({ createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).select("name subject status createdAt").lean(),
     Payment.find({ status: "paid", paidAt: { $gte: since } }).sort({ paidAt: -1 }).limit(ACTIVITY_LIMIT)
       .select("userMobile courseTitle finalAmount provider couponCode paidAt").lean(),
-    User.find({ createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).select("name mobile createdAt").lean(),
+    User.find({ createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).select("name mobile email createdAt").lean(),
   ]);
 
   const items = [
@@ -48,7 +52,7 @@ async function recentActivity(since) {
       id: `user:${user._id}`,
       type: "signup",
       title: "New customer sign-up",
-      message: customerLabel(user.name, user.mobile),
+      message: customerLabel(user.name, user.mobile, user.email),
       link: "/customers",
       createdAt: user.createdAt,
     })),

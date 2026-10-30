@@ -7,3 +7,11 @@ dist/
 build/
 skybird-api/private-videos/
 skybird-api/uploads/
+
+# Tests (kept locally, not committed)
+skybird-api/test/
+*.test.js
+*.spec.js
+coverage/
+test-results/
+playwright-report/

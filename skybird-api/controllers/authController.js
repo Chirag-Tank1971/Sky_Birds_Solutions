@@ -4,8 +4,23 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
 const OtpChallenge = require("../models/OtpChallenge");
+const { otpEmail } = require("../services/otpEmail");
 
 const OTP_RESEND_INTERVAL_MS = 60 * 1000;
+// Keep in sync with the profession dropdown on the user site's sign-up tab.
+const PROFESSIONS = ["Student", "Working professional", "Business owner", "Marketplace seller", "Other"];
+
+// Returns the cleaned sign-up profile, or null if any field is missing or invalid.
+// The verified mobile number or email comes from the OTP step, not from here.
+function parseSignupProfile(body) {
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const age = Number(body?.age);
+  const profession = typeof body?.profession === "string" ? body.profession.trim() : "";
+  if (name.length < 2 || name.length > 100) return null;
+  if (!Number.isInteger(age) || age < 13 || age > 100) return null;
+  if (!PROFESSIONS.includes(profession)) return null;
+  return { name, age, profession };
+}
 
 const generateToken = (id, role) => {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
@@ -79,36 +94,85 @@ function sendApiTxtOtp(to, otp, expiresAt) {
 }
 
 
-function normalizeMobile(value) {
-  return String(value || "").replace(/\D/g, "");
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// A customer signs in with a 10-digit mobile number or an email address.
+// Older clients send the value as `mobile`, so that key is still accepted.
+function parseIdentifier(body) {
+  const raw = String(body?.identifier ?? body?.mobile ?? "").trim();
+  if (raw.includes("@")) {
+    const email = raw.toLowerCase();
+    return email.length <= 254 && EMAIL_RE.test(email) ? { field: "email", value: email } : null;
+  }
+  const mobile = raw.replace(/\D/g, "");
+  return /^\d{10}$/.test(mobile) ? { field: "mobile", value: mobile } : null;
 }
 
-function hashOtp(mobile, otp) {
+const accountQuery = (id) => ({ [id.field]: id.value });
+const publicUser = (user) => ({ id: user._id, mobile: user.mobile || "", email: user.email || "", name: user.name, role: user.role });
+
+// Sends the OTP by email through Resend's REST API.
+async function sendEmailOtp(to, otp, expiresAt, purpose) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM;
+  if (!apiKey || !from) {
+    const error = new Error("Email OTP is not available right now. Please use your mobile number or contact support.");
+    error.statusCode = 503;
+    throw error;
+  }
+  const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60000));
+  let response;
+  try {
+    response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        ...otpEmail({ otp, minutes, purpose }),
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    const error = new Error("Unable to send the email right now. Please try again.");
+    error.statusCode = 503;
+    throw error;
+  }
+  if (!response.ok) {
+    // Resend explains the rejection (e.g. unverified domain); log it, never send it to the browser.
+    const detail = (await response.text().catch(() => "")).slice(0, 300);
+    const error = new Error(`Resend rejected OTP email (HTTP ${response.status}): ${detail}`);
+    error.statusCode = 502;
+    throw error;
+  }
+}
+
+function hashOtp(identifier, otp) {
   const pepper = process.env.OTP_PEPPER || process.env.JWT_SECRET;
   if (!pepper || pepper.length < 32) throw new Error("OTP security is not configured");
-  return crypto.createHash("sha256").update(`${mobile}:${otp}:${pepper}`).digest("hex");
+  return crypto.createHash("sha256").update(`${identifier}:${otp}:${pepper}`).digest("hex");
 }
 
-function issuePurposeToken(mobile, purpose) {
+function issuePurposeToken(identifier, purpose) {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
     throw new Error("Authentication is not configured securely");
   }
   const jti = crypto.randomBytes(24).toString("hex");
   const token = jwt.sign(
-    { mobile, purpose, jti },
+    { identifier, purpose, jti },
     process.env.JWT_SECRET,
     { expiresIn: "10m", issuer: "skybirds-api", audience: "skybirds-client" }
   );
   return { token, jti };
 }
 
-function readPurposeToken(token, purpose, mobile) {
+function readPurposeToken(token, purpose, identifier) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET, {
       issuer: "skybirds-api",
       audience: "skybirds-client",
     });
-    return payload.purpose === purpose && payload.mobile === mobile && payload.jti
+    return payload.purpose === purpose && payload.identifier === identifier && payload.jti
       ? payload
       : null;
   } catch {
@@ -116,8 +180,8 @@ function readPurposeToken(token, purpose, mobile) {
   }
 }
 
-function verifyPurposeToken(token, purpose, mobile) {
-  return Boolean(readPurposeToken(token, purpose, mobile));
+function verifyPurposeToken(token, purpose, identifier) {
+  return Boolean(readPurposeToken(token, purpose, identifier));
 }
 
 function validPassword(password) {
@@ -125,25 +189,28 @@ function validPassword(password) {
     password.length <= 128 && !/[\u0000-\u001F\u007F]/.test(password);
 }
 
+const NO_ACCOUNT = "No account found for this mobile number or email.";
+const VERIFY_AGAIN = "Verify your mobile number or email again.";
+
 exports.sendOtp = async (req, res) => {
   try {
-    const mobile = normalizeMobile(req.body?.mobile);
+    const id = parseIdentifier(req.body);
     const purpose = req.body?.purpose === "reset" ? "reset" : "register";
-    if (!/^\d{10}$/.test(mobile)) {
-      return res.status(400).json({ success: false, message: "Please provide a valid 10-digit mobile number" });
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Enter a valid 10-digit mobile number or email address" });
     }
 
-    const existingUser = await User.findOne({ mobile }).select("_id");
+    const existingUser = await User.findOne(accountQuery(id)).select("_id");
     if (purpose === "register" && existingUser) {
-      // Preserve endpoint compatibility while avoiding unnecessary SMS for registered users.
-      return res.status(200).json({ success: true, existingUser: true, message: "Please log in with your mobile number and password." });
+      // Preserve endpoint compatibility while avoiding an unnecessary OTP for registered users.
+      return res.status(200).json({ success: true, existingUser: true, message: "Please sign in with your password." });
     }
     if (purpose === "reset" && !existingUser) {
-      return res.status(404).json({ success: false, message: "No account found for this mobile number." });
+      return res.status(404).json({ success: false, message: NO_ACCOUNT });
     }
 
-    // At most one SMS per number per minute, whatever IP the requests come from.
-    const previous = await OtpChallenge.findOne({ mobile }).select("createdAt");
+    // At most one OTP per number or email per minute, whatever IP the requests come from.
+    const previous = await OtpChallenge.findOne({ identifier: id.value }).select("createdAt");
     const waitMs = previous?.createdAt ? OTP_RESEND_INTERVAL_MS - (Date.now() - previous.createdAt.getTime()) : 0;
     if (waitMs > 0) {
       const seconds = Math.ceil(waitMs / 1000);
@@ -152,19 +219,20 @@ exports.sendOtp = async (req, res) => {
     }
 
     const otp = crypto.randomInt(100000, 1000000).toString();
-    const codeHash = hashOtp(mobile, otp);
+    const codeHash = hashOtp(id.value, otp);
     const expiresAt = new Date(Date.now() + Math.min(10, Math.max(2, Number(process.env.OTP_EXPIRE_MINUTES) || 5)) * 60 * 1000);
 
-    await OtpChallenge.deleteOne({ mobile });
-    await sendApiTxtOtp(mobile, otp, expiresAt);
+    await OtpChallenge.deleteOne({ identifier: id.value });
+    if (id.field === "email") await sendEmailOtp(id.value, otp, expiresAt, purpose);
+    else await sendApiTxtOtp(id.value, otp, expiresAt);
     await OtpChallenge.findOneAndUpdate(
-      { mobile },
+      { identifier: id.value },
       { $set: { codeHash, purpose, expiresAt, attempts: 0, createdAt: new Date() } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     return res.status(200).json({
       success: true,
-      message: "OTP sent successfully",
+      message: id.field === "email" ? "OTP sent to your email" : "OTP sent successfully",
       existingUser: !!existingUser,
     });
   } catch (error) {
@@ -179,15 +247,15 @@ exports.sendOtp = async (req, res) => {
 
 exports.verifyOtp = async (req, res) => {
   try {
-    const mobile = normalizeMobile(req.body?.mobile);
+    const id = parseIdentifier(req.body);
     const otp = String(req.body?.otp || "").trim();
     const purpose = req.body?.purpose === "reset" ? "reset" : "register";
     const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 100) : "";
-    if (!/^\d{10}$/.test(mobile) || !/^\d{6}$/.test(otp)) {
-      return res.status(400).json({ success: false, message: "Please provide a valid mobile number and 6-digit OTP" });
+    if (!id || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ success: false, message: "Please provide a valid mobile number or email and 6-digit OTP" });
     }
 
-    const challenge = await OtpChallenge.findOne({ mobile, purpose });
+    const challenge = await OtpChallenge.findOne({ identifier: id.value, purpose });
     if (!challenge || challenge.expiresAt <= new Date()) {
       if (challenge) await OtpChallenge.deleteOne({ _id: challenge._id });
       return res.status(400).json({ success: false, message: "OTP expired or not requested. Please request a new OTP." });
@@ -199,11 +267,11 @@ exports.verifyOtp = async (req, res) => {
       { new: true }
     );
     if (!attempt) {
-      await OtpChallenge.deleteOne({ mobile, purpose, attempts: { $gte: 5 } });
+      await OtpChallenge.deleteOne({ identifier: id.value, purpose, attempts: { $gte: 5 } });
       return res.status(429).json({ success: false, message: "Too many incorrect attempts. Please request a new OTP." });
     }
 
-    const supplied = Buffer.from(hashOtp(mobile, otp), "hex");
+    const supplied = Buffer.from(hashOtp(id.value, otp), "hex");
     const expected = Buffer.from(attempt.codeHash, "hex");
     if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
       if (attempt.attempts >= 5) await OtpChallenge.deleteOne({ _id: attempt._id });
@@ -219,24 +287,24 @@ exports.verifyOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: "OTP already used. Please request a new OTP." });
     }
 
-    const user = await User.findOne({ mobile }).select("_id isBlocked");
+    const user = await User.findOne(accountQuery(id)).select("_id isBlocked");
     if (purpose === "register" && user) {
-      return res.status(409).json({ success: false, message: "An account already exists. Please log in with your password." });
+      return res.status(409).json({ success: false, message: "An account already exists. Please sign in with your password." });
     }
     if (purpose === "reset" && !user) {
-      return res.status(404).json({ success: false, message: "No account found for this mobile number." });
+      return res.status(404).json({ success: false, message: NO_ACCOUNT });
     }
     if (user?.isBlocked) {
       return res.status(403).json({ success: false, message: "Your account has been blocked. Contact support." });
     }
 
-    const issued = issuePurposeToken(mobile, purpose === "reset" ? "password_reset" : "password_setup");
+    const issued = issuePurposeToken(id.value, purpose === "reset" ? "password_reset" : "password_setup");
     if (purpose === "reset") {
-      const resetUser = await User.findOne({ mobile }).select("+passwordResetJti");
+      const resetUser = await User.findOne(accountQuery(id)).select("+passwordResetJti");
       if (!resetUser || resetUser.isBlocked) {
         return res.status(resetUser ? 403 : 404).json({
           success: false,
-          message: resetUser ? "Your account has been blocked. Contact support." : "No account found for this mobile number.",
+          message: resetUser ? "Your account has been blocked. Contact support." : NO_ACCOUNT,
         });
       }
       resetUser.passwordResetJti = issued.jti;
@@ -245,7 +313,7 @@ exports.verifyOtp = async (req, res) => {
     return res.status(200).json({
       success: true,
       verified: true,
-      message: "Mobile number verified",
+      message: id.field === "email" ? "Email verified" : "Mobile number verified",
       verificationToken: issued.token,
       purpose,
       name,
@@ -258,14 +326,18 @@ exports.verifyOtp = async (req, res) => {
 
 exports.customerLogin = async (req, res) => {
   try {
-    const mobile = normalizeMobile(req.body?.mobile);
+    const id = parseIdentifier(req.body);
     const password = String(req.body?.password || "");
-    if (!/^\d{10}$/.test(mobile) || !password || password.length > 128) {
-      return res.status(400).json({ success: false, message: "Enter a valid mobile number and password." });
+    if (!id || !password || password.length > 128) {
+      return res.status(400).json({ success: false, message: "Enter a valid mobile number or email and your password." });
     }
-    const user = await User.findOne({ mobile }).select("+passwordHash");
-    if (!user || !user.passwordHash || !(await require("bcryptjs").compare(password, user.passwordHash))) {
-      return res.status(401).json({ success: false, message: "Invalid mobile number or password. If you have not set a password, use Forgot password." });
+    const user = await User.findOne(accountQuery(id)).select("+passwordHash");
+    // Sign-up and password reset already reveal whether an account exists, so say so plainly here too.
+    if (!user) {
+      return res.status(404).json({ success: false, message: `No account found with this ${id.field === "email" ? "email" : "mobile number"}. Please sign up first.` });
+    }
+    if (!user.passwordHash || !(await require("bcryptjs").compare(password, user.passwordHash))) {
+      return res.status(401).json({ success: false, message: "Incorrect password. Try again or use Forgot password." });
     }
     if (user.isBlocked) return res.status(403).json({ success: false, message: "Your account has been blocked. Contact support." });
     const token = generateToken(user._id, "customer");
@@ -273,7 +345,7 @@ exports.customerLogin = async (req, res) => {
       success: true,
       message: "Login successful",
       token,
-      user: { id: user._id, mobile: user.mobile, name: user.name, role: user.role },
+      user: publicUser(user),
     });
   } catch (error) {
     console.error("Customer login failed:", error.message);
@@ -283,29 +355,33 @@ exports.customerLogin = async (req, res) => {
 
 exports.setPassword = async (req, res) => {
   try {
-    const mobile = normalizeMobile(req.body?.mobile);
+    const id = parseIdentifier(req.body);
     const password = req.body?.password;
     const verificationToken = String(req.body?.verificationToken || "");
-    if (!/^\d{10}$/.test(mobile) || !validPassword(password) ||
-        !verifyPurposeToken(verificationToken, "password_setup", mobile)) {
-      return res.status(400).json({ success: false, message: "Verification expired or password is invalid. Verify your mobile again." });
+    if (!id || !validPassword(password) ||
+        !verifyPurposeToken(verificationToken, "password_setup", id.value)) {
+      return res.status(400).json({ success: false, message: `Verification expired or password is invalid. ${VERIFY_AGAIN}` });
     }
-    const alreadyExists = await User.findOne({ mobile }).select("_id");
-    if (alreadyExists) return res.status(409).json({ success: false, message: "An account already exists. Please log in or reset your password." });
+    const alreadyExists = await User.findOne(accountQuery(id)).select("_id");
+    if (alreadyExists) return res.status(409).json({ success: false, message: "An account already exists. Please sign in or reset your password." });
+
+    const profile = parseSignupProfile(req.body);
+    if (!profile) {
+      return res.status(400).json({ success: false, message: "Please fill in your name, age and profession." });
+    }
 
     const bcrypt = require("bcryptjs");
     const passwordHash = await bcrypt.hash(password, 12);
-    const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 100) : "";
-    const user = await User.create({ mobile, name, passwordHash });
+    const user = await User.create({ ...accountQuery(id), ...profile, passwordHash });
     const token = generateToken(user._id, "customer");
     return res.status(201).json({
       success: true,
       message: "Account created successfully",
       token,
-      user: { id: user._id, mobile: user.mobile, name: user.name, role: user.role },
+      user: publicUser(user),
     });
   } catch (error) {
-    if (error.code === 11000) return res.status(409).json({ success: false, message: "An account already exists. Please log in." });
+    if (error.code === 11000) return res.status(409).json({ success: false, message: "An account already exists. Please sign in." });
     console.error("Set customer password failed:", error.message);
     return res.status(500).json({ success: false, message: "Unable to create your account right now" });
   }
@@ -313,22 +389,22 @@ exports.setPassword = async (req, res) => {
 
 exports.resetPassword = async (req, res) => {
   try {
-    const mobile = normalizeMobile(req.body?.mobile);
+    const id = parseIdentifier(req.body);
     const password = req.body?.password;
     const verificationToken = String(req.body?.verificationToken || "");
-    if (!/^\d{10}$/.test(mobile) || !validPassword(password) ||
-        !verifyPurposeToken(verificationToken, "password_reset", mobile)) {
-      return res.status(400).json({ success: false, message: "Verification expired or password is invalid. Verify your mobile again." });
+    if (!id || !validPassword(password) ||
+        !verifyPurposeToken(verificationToken, "password_reset", id.value)) {
+      return res.status(400).json({ success: false, message: `Verification expired or password is invalid. ${VERIFY_AGAIN}` });
     }
-    const tokenPayload = readPurposeToken(verificationToken, "password_reset", mobile);
+    const tokenPayload = readPurposeToken(verificationToken, "password_reset", id.value);
     if (!tokenPayload) {
-      return res.status(400).json({ success: false, message: "Verification expired or invalid. Verify your mobile again." });
+      return res.status(400).json({ success: false, message: `Verification expired or invalid. ${VERIFY_AGAIN}` });
     }
-    const user = await User.findOne({ mobile }).select("+passwordHash +passwordResetJti");
-    if (!user) return res.status(404).json({ success: false, message: "No account found for this mobile number." });
+    const user = await User.findOne(accountQuery(id)).select("+passwordHash +passwordResetJti");
+    if (!user) return res.status(404).json({ success: false, message: NO_ACCOUNT });
     if (user.isBlocked) return res.status(403).json({ success: false, message: "Your account has been blocked. Contact support." });
     if (!user.passwordResetJti || user.passwordResetJti !== tokenPayload.jti) {
-      return res.status(400).json({ success: false, message: "Reset token has already been used or replaced. Verify your mobile again." });
+      return res.status(400).json({ success: false, message: `Reset token has already been used or replaced. ${VERIFY_AGAIN}` });
     }
     const passwordHash = await require("bcryptjs").hash(password, 12);
     const updated = await User.updateOne(
@@ -337,7 +413,7 @@ exports.resetPassword = async (req, res) => {
       { $set: { passwordHash, passwordChangedAt: new Date() }, $unset: { passwordResetJti: 1 } }
     );
     if (!updated.modifiedCount) {
-      return res.status(400).json({ success: false, message: "Reset token has already been used. Verify your mobile again." });
+      return res.status(400).json({ success: false, message: `Reset token has already been used. ${VERIFY_AGAIN}` });
     }
     return res.status(200).json({ success: true, message: "Password reset successfully. Please log in with your new password." });
   } catch (error) {

@@ -2,16 +2,32 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
   {
+    // An account signs up with a mobile number or an email (or both); each is unique when present.
     mobile: {
       type: String,
-      required: true,
-      unique: true,
       trim: true,
     },
     name: {
       type: String,
       default: "",
       maxlength: 100,
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      maxlength: 254,
+    },
+    // Collected at sign-up; empty on accounts created before these fields existed.
+    age: {
+      type: Number,
+      min: 13,
+      max: 100,
+    },
+    profession: {
+      type: String,
+      default: "",
+      maxlength: 60,
     },
     passwordHash: {
       type: String,
@@ -52,5 +68,9 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Partial indexes: unique only among accounts that have a non-empty value.
+userSchema.index({ mobile: 1 }, { unique: true, partialFilterExpression: { mobile: { $gt: "" } } });
+userSchema.index({ email: 1 }, { unique: true, partialFilterExpression: { email: { $gt: "" } } });
 
 module.exports = mongoose.model("User", userSchema);

@@ -94,7 +94,16 @@
       "Bash(node --check skybird-api/controllers/siteController.js)",
       "Read(//d/WORK/**)",
       "PowerShell(npx vite build 2>&1)",
-      "PowerShell(npx eslint src/pages/Contact.jsx)"
+      "PowerShell(npx eslint src/pages/Contact.jsx)",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-auth.js\" controllers/authController.js)",
+      "Bash(node -e 'require\\(\"./controllers/authController\"\\)')",
+      "Bash(node \"C:/Users/DELL/AppData/Local/Temp/claude/d--WORK-Sky-Birds-Solutions/f887111b-1a5c-418b-9ceb-305f67738077/scratchpad/patch-login.js\" src/pages/Login.jsx)",
+      "Bash(node -e 'require\\(\"dotenv\"\\).config\\(\\); console.log\\(JSON.stringify\\(process.env.RESEND_FROM\\)\\)')",
+      "Bash(sed -i 's/^RESEND_FROM=.*/RESEND_FROM=SkyBirds <no-reply@skybirdssolution.com>/' .env)",
+      "Bash(sed -i 's/^RESEND_FROM=.*/RESEND_FROM=SkyBirds <owner@skybirdssolution.com>/' .env)",
+      "Bash(node -e 'require\\(\"dotenv\"\\).config\\(\\); const k=process.env.RESEND_API_KEY||\"\"; console.log\\(\"FROM:\", JSON.stringify\\(process.env.RESEND_FROM\\), \"| key:\", k ? k.slice\\(0,3\\)+\"…\"+k.slice\\(-4\\)+\" \\(\"+k.length+\" chars\\)\" : \"missing\"\\)')",
+      "Bash(awk '{print \"env modified at\", $6}')",
+      "Bash(nslookup -type=TXT resend._domainkey.skybirdssolution.com 8.8.8.8)"
     ],
     "additionalDirectories": [
       "C:\\Users\\DELL\\AppData\\Local\\Temp\\claude\\d--WORK-Sky-Birds-Solutions\\f887111b-1a5c-418b-9ceb-305f67738077\\scratchpad"

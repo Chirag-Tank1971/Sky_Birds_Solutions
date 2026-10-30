@@ -1,13 +1,14 @@
 import API from "./axios"
 
-export async function sendOtp(mobile, purpose = "register") {
-  const { data } = await API.post("/auth/customer/send-otp", { mobile, purpose })
+// `identifier` is a 10-digit mobile number or an email address.
+export async function sendOtp(identifier, purpose = "register") {
+  const { data } = await API.post("/auth/customer/send-otp", { identifier, purpose })
   return data
 }
 
-export async function verifyOtp({ mobile, otp, name, purpose = "register" }) {
+export async function verifyOtp({ identifier, otp, name, purpose = "register" }) {
   const { data } = await API.post("/auth/customer/verify-otp", {
-    mobile,
+    identifier,
     otp,
     name,
     purpose,
@@ -15,24 +16,26 @@ export async function verifyOtp({ mobile, otp, name, purpose = "register" }) {
   return data
 }
 
-export async function loginWithPassword({ mobile, password }) {
-  const { data } = await API.post("/auth/customer/login", { mobile, password })
+export async function loginWithPassword({ identifier, password }) {
+  const { data } = await API.post("/auth/customer/login", { identifier, password })
   return data
 }
 
-export async function setPassword({ mobile, password, verificationToken, name }) {
+export async function setPassword({ identifier, password, verificationToken, name, age, profession }) {
   const { data } = await API.post("/auth/customer/set-password", {
-    mobile,
+    identifier,
     password,
     verificationToken,
     name,
+    age,
+    profession,
   })
   return data
 }
 
-export async function resetPassword({ mobile, password, verificationToken }) {
+export async function resetPassword({ identifier, password, verificationToken }) {
   const { data } = await API.post("/auth/customer/reset-password", {
-    mobile,
+    identifier,
     password,
     verificationToken,
   })

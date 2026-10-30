@@ -9,6 +9,9 @@ import OtpInput from "../components/OtpInput";
 
 // Matches the API, which allows one OTP per number per minute.
 const OTP_RESEND_SECONDS = 60;
+// Must match PROFESSIONS in skybird-api/controllers/authController.js.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PROFESSIONS = ["Student", "Working professional", "Business owner", "Marketplace seller", "Other"];
 
 export default function Login() {
   const {
@@ -26,9 +29,15 @@ export default function Login() {
   const from = location.state?.from;
 
   const [step, setStep] = useState("mobile");
+  const [mode, setMode] = useState("signin");
+  // Customers can use either a mobile number or an email address.
+  const [channel, setChannel] = useState("mobile");
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [age, setAge] = useState("");
+  const [profession, setProfession] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [verificationToken, setVerificationToken] = useState("");
@@ -48,6 +57,11 @@ export default function Login() {
     return () => window.clearTimeout(timer);
   }, [resendCountdown]);
 
+  const identifier = channel === "mobile" ? mobile : email.trim().toLowerCase();
+  const identifierValid = channel === "mobile" ? /^\d{10}$/.test(mobile) : EMAIL_RE.test(identifier);
+  const contactLabel = channel === "mobile" ? `+91 ${mobile}` : identifier;
+  const invalidContact = channel === "mobile" ? "Enter a valid 10-digit mobile number" : "Enter a valid email address";
+
   if (isAuthenticated) {
     return <Navigate to={from || (purchasedCourses.length > 0 ? "/dashboard" : "/courses")} replace />;
   }
@@ -56,20 +70,20 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setInfo("");
-    if (!/^\d{10}$/.test(mobile)) {
-      setError("Enter a valid 10-digit mobile number");
+    if (!identifierValid) {
+      setError(invalidContact);
       return;
     }
 
-    const res = await sendOtp(mobile, "register");
+    const res = await sendOtp(identifier, "register");
     if (!res.success) {
       setError(res.message || "Unable to continue. Please try again.");
       return;
     }
 
     if (res.existingUser) {
-      setStep("login");
-      setInfo("Welcome back! Enter your password to log in.");
+      setMode("signin");
+      setInfo("You already have an account. Sign in with your password.");
       return;
     }
 
@@ -77,9 +91,22 @@ export default function Login() {
     setOtp("");
     setPassword("");
     setConfirmPassword("");
-    setInfo(res.message || "OTP sent to your mobile number.");
+    setInfo(res.message || "OTP sent.");
     setResendCountdown(OTP_RESEND_SECONDS);
-      setSentCount((count) => count + 1);
+    setSentCount((count) => count + 1);
+  };
+
+  const switchChannel = () => {
+    setChannel((current) => (current === "mobile" ? "email" : "mobile"));
+    setError("");
+    setInfo("");
+  };
+
+  const switchMode = (next) => {
+    setMode(next);
+    setError("");
+    setInfo("");
+    setPassword("");
   };
 
   const handleResendOtp = async () => {
@@ -87,7 +114,7 @@ export default function Login() {
     setError("");
     setInfo("");
     const purpose = step === "forgot-otp" ? "reset" : "register";
-    const res = await sendOtp(mobile, purpose);
+    const res = await sendOtp(identifier, purpose);
     if (res.success) {
       setOtp("");
       setResendCountdown(OTP_RESEND_SECONDS);
@@ -106,7 +133,7 @@ export default function Login() {
       return;
     }
     const purpose = step === "forgot-otp" ? "reset" : "register";
-    const res = await verifyOtp({ mobile, otp, name: name.trim(), purpose });
+    const res = await verifyOtp({ identifier, otp, name: name.trim(), purpose });
     if (!res.success) {
       setOtpErrors((count) => count + 1);
       setError(res.message || "Invalid OTP");
@@ -117,16 +144,21 @@ export default function Login() {
     setConfirmPassword("");
     setOtp("");
     setStep(purpose === "reset" ? "reset-password" : "password");
-    setInfo("Mobile number verified successfully.");
+    setInfo(channel === "email" ? "Email verified successfully." : "Mobile number verified successfully.");
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
-    const res = await loginWithPassword({ mobile, password });
+    setInfo("");
+    if (!identifierValid) {
+      setError(invalidContact);
+      return;
+    }
+    const res = await loginWithPassword({ identifier, password });
     // Return to the page that sent the user here (for example a course's Buy button).
     if (res.success) navigate(from || res.redirectTo, { replace: true });
-    else setError(res.message || "Invalid mobile number or password.");
+    else setError(res.message || "Incorrect login details or password.");
   };
 
   const handleSetPassword = async (e) => {
@@ -141,10 +173,12 @@ export default function Login() {
       return;
     }
     const res = await registerWithPassword({
-      mobile,
+      identifier,
       password,
       verificationToken,
       name: name.trim(),
+      age: Number(age),
+      profession,
     });
     if (res.success) navigate(from || res.redirectTo, { replace: true });
     else setError(res.message || "Unable to create your account.");
@@ -153,7 +187,11 @@ export default function Login() {
   const handleForgotPassword = async () => {
     setError("");
     setInfo("");
-    const res = await sendOtp(mobile, "reset");
+    if (!identifierValid) {
+      setError(channel === "mobile" ? "Enter your 10-digit mobile number first" : "Enter your email address first");
+      return;
+    }
+    const res = await sendOtp(identifier, "reset");
     if (res.success) {
       setStep("forgot-otp");
       setOtp("");
@@ -176,9 +214,10 @@ export default function Login() {
       setError("Passwords do not match.");
       return;
     }
-    const res = await resetPassword({ mobile, password, verificationToken });
+    const res = await resetPassword({ identifier, password, verificationToken });
     if (res.success) {
-      setStep("login");
+      setStep("mobile");
+      setMode("signin");
       setPassword("");
       setConfirmPassword("");
       setVerificationToken("");
@@ -189,19 +228,17 @@ export default function Login() {
   };
 
   const titles = {
-    mobile: "Sign in / Sign up",
-    login: "Welcome Back",
+    mobile: mode === "signin" ? "Welcome back" : "Create your account",
     otp: "Verify OTP",
     password: "Create Password",
     "forgot-otp": "Reset Password",
     "reset-password": "Create New Password",
   };
   const descriptions = {
-    mobile: "Enter your mobile number to continue",
-    login: `Log in with +91 ${mobile}`,
-    otp: `OTP sent to +91 ${mobile}`,
+    mobile: mode === "signin" ? "Sign in with your mobile number or email" : "Sign up with your mobile number or email",
+    otp: `OTP sent to ${contactLabel}`,
     password: "Set a password for your new account",
-    "forgot-otp": `Reset OTP sent to +91 ${mobile}`,
+    "forgot-otp": `Reset OTP sent to ${contactLabel}`,
     "reset-password": "Choose a new password for your account",
   };
 
@@ -227,15 +264,15 @@ export default function Login() {
         transition={{ duration: 12, ease: "easeInOut", repeat: Infinity }}
       />
 
-      <div className="relative mx-auto flex max-w-lg flex-col items-center px-4 py-16">
+      <div className="relative mx-auto flex max-w-xl flex-col items-center px-4 py-8 sm:py-10">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.45 }}
-          className="w-full rounded-3xl border border-forest/10 bg-white p-8 shadow-lg shadow-forest/5"
+          className="w-full rounded-3xl border border-forest/10 bg-white p-6 shadow-lg sm:p-8 shadow-forest/5"
         >
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-[#10251D] p-2 shadow-lg shadow-forest/20">
+          <div className="mb-6 text-center">
+            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-[#10251D] p-2 shadow-lg shadow-forest/20">
               <img src="/assets/logo1.webp" alt="Sky Birds Solution" className="max-h-full max-w-full object-contain" />
             </div>
             <h1 className="text-2xl font-bold text-ink">{titles[step]}</h1>
@@ -244,90 +281,176 @@ export default function Login() {
 
           <AnimatePresence mode="wait">
             {step === "mobile" ? (
-              <motion.form
+              <motion.div
                 key="mobile"
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 12 }}
-                onSubmit={handleContinue}
-                className="space-y-5"
               >
-                <label className="block text-sm font-medium text-ink">
-                  Mobile number
-                  <div className="mt-1.5 flex overflow-hidden rounded-xl border border-forest/20 focus-within:border-leaf focus-within:ring-2 focus-within:ring-leaf/30">
-                    <span className="flex items-center bg-mint px-3 text-sm font-medium text-forest">+91</span>
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      autoComplete="tel-national"
-                      maxLength={10}
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      placeholder="9876543210"
-                      className="w-full px-3 py-2.5 outline-none"
-                      required
-                    />
-                  </div>
-                </label>
-                {renderError}
-                <button
-                  type="submit"
-                  disabled={loading || mobile.length !== 10}
-                  className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Shine />
-                  <RollText>{loading ? "Checking…" : "Continue"}</RollText>
-                </button>
-              </motion.form>
-            ) : null}
+                <div role="tablist" aria-label="Sign in or sign up" className="mb-5 grid grid-cols-2 rounded-full bg-mint/70 p-1">
+                  {[["signin", "Sign in"], ["signup", "Sign up"]].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="tab"
+                      aria-selected={mode === value}
+                      onClick={() => switchMode(value)}
+                      className={`relative rounded-full py-2.5 text-sm font-semibold transition-colors ${mode === value ? "text-ink" : "text-forest/70 hover:text-forest"}`}
+                    >
+                      {mode === value ? (
+                        <motion.span
+                          layoutId="auth-tab"
+                          className="absolute inset-0 rounded-full bg-white shadow-sm"
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+                        />
+                      ) : null}
+                      <span className="relative">{label}</span>
+                    </button>
+                  ))}
+                </div>
 
-            {step === "login" ? (
-              <motion.form
-                key="login"
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 12 }}
-                onSubmit={handleLogin}
-                className="space-y-5"
-              >
-                <label className="block text-sm font-medium text-ink">
-                  Mobile number
-                  <input
-                    type="tel"
-                    value={mobile}
-                    readOnly
-                    className="mt-1.5 w-full rounded-xl border border-forest/20 bg-gray-50 px-3 py-2.5 outline-none"
-                  />
-                </label>
-                <label className="block text-sm font-medium text-ink">
-                  Password
-                  <input
-                    type="password"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="mt-1.5 w-full rounded-xl border border-forest/20 px-3 py-2.5 outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
-                    required
-                  />
-                </label>
-                {renderError}
-                {renderInfo}
-                <button
-                  type="submit"
-                  disabled={loading || !password}
-                  className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Shine />
-                  <RollText>{loading ? "Logging in…" : "Login"}</RollText>
-                </button>
-                <button type="button" onClick={handleForgotPassword} disabled={loading} className="w-full text-center text-sm font-semibold text-forest hover:underline disabled:opacity-50">
-                  Forgot password?
-                </button>
-                <button type="button" onClick={() => { setStep("mobile"); setError(""); setInfo(""); setPassword(""); }} className="w-full text-center text-sm font-medium text-forest hover:underline">
-                  ← Change mobile number
-                </button>
-              </motion.form>
+                <form onSubmit={mode === "signin" ? handleLogin : handleContinue} className="space-y-5">
+                  <AnimatePresence initial={false}>
+                    {mode === "signup" ? (
+                      <motion.div key="name" initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="-mx-1 -mt-1 space-y-4 overflow-hidden p-1">
+                        <label className="block text-sm font-medium text-ink">
+                          Full name
+                          <input
+                            type="text"
+                            minLength={2}
+                            maxLength={100}
+                            autoComplete="name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g. Rahul Sharma"
+                            className="mt-1.5 w-full rounded-xl border border-forest/20 px-3 py-2.5 outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
+                            required
+                          />
+                        </label>
+                        <div className="grid grid-cols-[0.7fr_1.3fr] gap-3">
+                          <label className="block text-sm font-medium text-ink">
+                            Age
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={13}
+                              max={100}
+                              step={1}
+                              value={age}
+                              onChange={(e) => setAge(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                              placeholder="e.g. 24"
+                              className="mt-1.5 w-full rounded-xl border border-forest/20 px-3 py-2.5 outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
+                              required
+                            />
+                          </label>
+                          <label className="block text-sm font-medium text-ink">
+                            Profession
+                            <select
+                              value={profession}
+                              onChange={(e) => setProfession(e.target.value)}
+                              className={`mt-1.5 w-full rounded-xl border border-forest/20 bg-white px-3 py-2.5 outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30 ${profession ? "text-ink" : "text-ink/40"}`}
+                              required
+                            >
+                              <option value="" disabled>Select…</option>
+                              {PROFESSIONS.map((item) => (
+                                <option key={item} value={item} className="text-ink">{item}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                  <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <label htmlFor="contact" className="text-sm font-medium text-ink">
+                        {channel === "mobile" ? "Mobile number" : "Email address"}
+                      </label>
+                      <button type="button" onClick={switchChannel} className="text-xs font-semibold text-forest hover:underline">
+                        {channel === "mobile" ? "Use email instead" : "Use mobile instead"}
+                      </button>
+                    </div>
+                    {channel === "mobile" ? (
+                      <div className="mt-1.5 flex overflow-hidden rounded-xl border border-forest/20 focus-within:border-leaf focus-within:ring-2 focus-within:ring-leaf/30">
+                        <span className="flex items-center bg-mint px-3 text-sm font-medium text-forest">+91</span>
+                        <input
+                          id="contact"
+                          type="tel"
+                          inputMode="numeric"
+                          autoComplete="tel-national"
+                          value={mobile}
+                          onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                          placeholder="9876543210"
+                          className="w-full px-3 py-2.5 outline-none"
+                          required
+                        />
+                      </div>
+                    ) : (
+                      <input
+                        id="contact"
+                        type="email"
+                        autoComplete="email"
+                        maxLength={254}
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="mt-1.5 w-full rounded-xl border border-forest/20 px-3 py-2.5 outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
+                        required
+                      />
+                    )}
+                  </div>
+                  <AnimatePresence initial={false}>
+                    {mode === "signin" ? (
+                      <motion.div key="password" initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="overflow-hidden">
+                        <label className="block text-sm font-medium text-ink">
+                          Password
+                          <input
+                            type="password"
+                            autoComplete="current-password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Enter your password"
+                            className="mt-1.5 w-full rounded-xl border border-forest/20 px-3 py-2.5 outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
+                            required
+                          />
+                        </label>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                  {renderError}
+                  {renderInfo}
+                  <button
+                    type="submit"
+                    disabled={loading || !identifierValid || (mode === "signin" && !password)}
+                    className="relative overflow-hidden w-full rounded-full bg-leaf py-3 font-semibold text-white transition hover:bg-forest disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Shine />
+                    <RollText>
+                      {mode === "signin" ? (loading ? "Signing in…" : "Sign in") : loading ? "Sending OTP…" : "Send OTP"}
+                    </RollText>
+                  </button>
+                  {mode === "signin" ? (
+                    <button type="button" onClick={handleForgotPassword} disabled={loading} className="w-full text-center text-sm font-semibold text-forest hover:underline disabled:opacity-50">
+                      Forgot password?
+                    </button>
+                  ) : null}
+                </form>
+
+                <p className="mt-5 text-center text-sm text-ink/60">
+                  {mode === "signin" ? "New to SkyBirds? " : "Already have an account? "}
+                  <button type="button" onClick={() => switchMode(mode === "signin" ? "signup" : "signin")} className="font-semibold text-forest hover:underline">
+                    {mode === "signin" ? "Create an account" : "Sign in"}
+                  </button>
+                </p>
+              </motion.div>
             ) : null}
 
             {step === "otp" || step === "forgot-otp" ? (
@@ -339,21 +462,7 @@ export default function Login() {
                 onSubmit={handleVerify}
                 className="space-y-4"
               >
-                <OtpSentAnimation key={sentCount} />
-                {step === "otp" ? (
-                  <label className="block text-sm font-medium text-ink">
-                    Your name <span className="text-ink/40">(optional)</span>
-                    <input
-                      type="text"
-                      maxLength={100}
-                      autoComplete="name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Rahul Sharma"
-                      className="mt-1.5 w-full rounded-xl border border-forest/20 px-3 py-2.5 outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
-                    />
-                  </label>
-                ) : null}
+                <OtpSentAnimation key={sentCount} channel={channel} />
                 <div>
                   <p className="mb-1.5 text-sm font-medium text-ink">Enter OTP</p>
                   <OtpInput value={otp} onChange={setOtp} shakeKey={otpErrors} autoFocus />
@@ -387,7 +496,7 @@ export default function Login() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setStep(step === "forgot-otp" ? "login" : "mobile"); setOtp(""); setError(""); setInfo(""); }}
+                  onClick={() => { setStep("mobile"); setOtp(""); setError(""); setInfo(""); }}
                   className="w-full text-center text-sm font-medium text-forest hover:underline"
                 >
                   ← Back
@@ -449,7 +558,7 @@ export default function Login() {
           <p className="mt-6 text-center text-xs text-ink/40">
             By continuing you agree to SkyBirds terms.
             <br />
-            {step === "mobile" ? "New users verify their mobile number and create a password." : "Your mobile number is used to secure your account."}
+            Your mobile number or email is used to secure your account.
           </p>
         </motion.div>
 
