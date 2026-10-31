@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import {
   Link,
   Navigate,
+  useLocation,
   useParams,
   useSearchParams,
 } from "react-router-dom"
@@ -25,6 +26,7 @@ import { useUser } from "../context/UserContext"
 
 export default function Watch() {
   const { courseId } = useParams()
+  const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const videoId = searchParams.get("v")
   const { hasCourse, isAuthenticated, purchasesStatus } = useUser()
@@ -186,7 +188,8 @@ export default function Watch() {
   const lessonLink = (lesson) => `/watch/${encodeURIComponent(course.id)}?v=${encodeURIComponent(lesson.id)}`
 
   if (!selectedVideo && next.lesson) {
-    if (progress) return <Navigate to={lessonLink(next.lesson)} replace />
+    // This page stays mounted during its exit animation, when the address is already another page's.
+    if (progress && pathname.startsWith("/watch/")) return <Navigate to={lessonLink(next.lesson)} replace />
     return (
       <div className="flex min-h-[70vh] items-center justify-center bg-canvas">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-leaf/20 border-t-leaf" />
