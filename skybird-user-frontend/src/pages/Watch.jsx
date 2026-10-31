@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   Link,
   Navigate,
@@ -7,12 +7,14 @@ import {
 } from "react-router-dom"
 import {
   ArrowLeft,
-  BookOpen,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clock3,
   Lock,
   PlayCircle,
+  ShieldCheck,
   Video,
 } from "lucide-react"
 import ProtectedVideo from "../components/ProtectedVideo"
@@ -32,6 +34,7 @@ export default function Watch() {
   const [error, setError] = useState("")
   // lessonId -> saved progress. Null until loaded, so a lesson doesn't start before its saved position is known.
   const [progress, setProgress] = useState(null)
+  const [toggledGroups, setToggledGroups] = useState({})
 
   useEffect(() => {
     if (!isAuthenticated) return undefined
@@ -167,7 +170,7 @@ export default function Watch() {
   const orderedLessons = groups.flatMap((group) => group.lessons)
   const showModules = groups.some((group) => group.id)
 
-  // No lesson chosen (or an unknown one) shows the course overview; playback starts when the student picks.
+  // No lesson chosen (or an unknown one) goes to the next lesson below, once saved progress is known.
   if (videoId) selectedVideo = orderedLessons.find((v) => v.id === videoId) || null
 
   const saved = progress || {}
@@ -182,293 +185,219 @@ export default function Watch() {
   const playableCount = orderedLessons.filter((v) => !v.upcoming).length
   const lessonLink = (lesson) => `/watch/${encodeURIComponent(course.id)}?v=${encodeURIComponent(lesson.id)}`
 
+  if (!selectedVideo && next.lesson) {
+    if (progress) return <Navigate to={lessonLink(next.lesson)} replace />
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center bg-canvas">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-leaf/20 border-t-leaf" />
+      </div>
+    )
+  }
+
   const title = selectedVideo?.title || course.title
   const secureVideoId = selectedVideo?.videoId || ""
+  const overallPercent = playableCount ? Math.round((completedCount / playableCount) * 100) : 0
+
+  const playable = orderedLessons.filter((v) => !v.upcoming)
+  const selectedIndex = selectedVideo ? playable.indexOf(selectedVideo) : -1
+  const previousLesson = selectedIndex > 0 ? playable[selectedIndex - 1] : null
+  const followingLesson = selectedIndex >= 0 ? playable[selectedIndex + 1] || null : null
+  const selectedModule = selectedVideo ? groups.find((group) => group.lessons.includes(selectedVideo)) : null
+
+  // The module being watched (or next up) starts open; the student can open or close any of them.
+  const focusLesson = selectedVideo || next.lesson
+  const isGroupOpen = (group) => toggledGroups[group.id] ?? (!showModules || group.lessons.includes(focusLesson))
+  const toggleGroup = (group) => setToggledGroups((prev) => ({ ...prev, [group.id]: !isGroupOpen(group) }))
 
   return (
-    <main className="min-h-screen bg-canvas max-w-7xl m-auto">
-      {/* Soft Background */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -right-40 top-20 h-96 w-96 rounded-full bg-leaf/5 blur-3xl" />
-        <div className="absolute -left-40 top-[45%] h-96 w-96 rounded-full bg-mint/40 blur-3xl" />
-      </div>
+    <main className="min-h-screen bg-canvas">
+      <div className="mx-auto max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8">
+        {/* Course bar */}
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              to="/dashboard"
+              aria-label="Back to dashboard"
+              title="Back to dashboard"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-forest/10 bg-white text-forest shadow-sm transition hover:bg-mint"
+            >
+              <ArrowLeft size={17} />
+            </Link>
+            <h1 className="min-w-0 truncate text-lg font-bold text-ink sm:text-xl">{course.title}</h1>
+          </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        {/* TOP NAV */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <Link
-            to={selectedVideo ? `/watch/${encodeURIComponent(course.id)}` : "/dashboard"}
-            className="group inline-flex items-center gap-2 text-sm font-semibold text-forest transition hover:text-leaf"
-          >
-            <span className="grid h-9 w-9 place-items-center rounded-full border border-forest/10 bg-white shadow-sm transition group-hover:-translate-x-1">
-              <ArrowLeft size={16} />
-            </span>
-
-            <span>{selectedVideo ? "Back to course" : "Back to Dashboard"}</span>
-          </Link>
-
-          {/* Course badge */}
-          <div className="hidden items-center gap-2 rounded-full border border-forest/10 bg-white px-4 py-2 text-xs font-semibold text-slate-600 shadow-sm sm:flex">
-            <BookOpen size={14} className="text-leaf" />
-            Course Learning
+          <div className="flex w-full items-center gap-3 sm:w-64">
+            <div
+              role="progressbar"
+              aria-label="Course progress"
+              aria-valuenow={overallPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="h-2 flex-1 overflow-hidden rounded-full bg-black/10"
+            >
+              <div className="h-full rounded-full bg-leaf transition-all" style={{ width: `${overallPercent}%` }} />
+            </div>
+            <span className="shrink-0 text-xs font-semibold text-slate-600">{overallPercent}% complete</span>
           </div>
         </div>
 
-        {/* COURSE HEADER */}
-        <div className="mt-7">
-          <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-            <div className="max-w-4xl">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-leaf">
-                Now Learning
-              </p>
-
-              <h1 className="mt-2 text-2xl font-black tracking-tight text-ink sm:text-3xl lg:text-4xl">
-                {course.title}
-              </h1>
-
-              {title !== course.title ? (
-                <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
-                  <ChevronRight
-                    size={15}
-                    className="text-leaf"
-                  />
-                  <span>{title}</span>
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+          {/* Player column */}
+          <div className="min-w-0">
+            {!selectedVideo ? (
+              <div className="rounded-2xl border border-forest/10 bg-white p-6 text-center shadow-sm sm:p-10">
+                <h2 className="text-xl font-bold text-ink">No lessons available yet</h2>
+                <p className="mt-2 text-sm text-slate-500">Lessons will appear here as soon as they're published.</p>
+              </div>
+            ) : secureVideoId && !progress ? (
+              <div className="flex aspect-video items-center justify-center rounded-2xl bg-black">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              </div>
+            ) : secureVideoId ? (
+              <div className="overflow-hidden rounded-2xl bg-black shadow-lg shadow-forest/10">
+                <ProtectedVideo
+                  key={selectedVideo.id}
+                  title={title}
+                  courseId={course.id}
+                  videoId={selectedVideo.id}
+                  startAt={startAt}
+                  onProgress={(position, duration, completed) => handleProgress(selectedVideo.id, position, duration, completed)}
+                />
+              </div>
+            ) : (
+              <div className="flex aspect-video items-center justify-center rounded-2xl border border-dashed border-forest/20 bg-white p-8 text-center">
+                <div className="max-w-sm">
+                  <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-mint text-forest">
+                    {selectedVideo.upcoming ? <Lock size={24} /> : <Video size={24} />}
+                  </div>
+                  <h2 className="mt-4 text-lg font-bold text-ink">
+                    {selectedVideo.upcoming ? "This lesson is coming soon" : "No video available"}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    {selectedVideo.upcoming
+                      ? "It will unlock here once it's published. Meanwhile, continue with the available lessons."
+                      : "No video is available for this lesson yet."}
+                  </p>
                 </div>
-              ) : null}
-            </div>
+              </div>
+            )}
 
-            {/* Lesson Info */}
             {selectedVideo ? (
-              <div className="flex shrink-0 items-center gap-3">
-                <div className="flex items-center gap-2 rounded-full border border-forest/10 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 shadow-sm">
-                  <Clock3
-                    size={14}
-                    className="text-leaf"
-                  />
-                  {selectedVideo.duration || "Video lesson"}
+              <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0 flex-1 basis-72">
+                  {showModules && selectedModule ? (
+                    <p className="text-xs font-semibold uppercase tracking-wider text-forest">{selectedModule.title}</p>
+                  ) : null}
+                  <h2 className="mt-1 break-words text-xl font-bold text-ink sm:text-2xl">{selectedVideo.title}</h2>
+                  <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    {selectedVideo.duration ? (
+                      <span className="inline-flex items-center gap-1.5"><Clock3 size={13} /> {selectedVideo.duration}</span>
+                    ) : null}
+                    <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Secure playback</span>
+                    {saved[selectedVideo.id]?.completed ? (
+                      <span className="inline-flex items-center gap-1.5 font-medium text-forest"><CheckCircle2 size={13} /> Completed</span>
+                    ) : null}
+                  </p>
                 </div>
-
-                <div className="flex items-center gap-2 rounded-full border border-leaf/20 bg-mint/60 px-4 py-2.5 text-xs font-bold text-forest">
-                  <CheckCircle2 size={14} />
-                  Enrolled
+                <div className="flex shrink-0 gap-2">
+                  {previousLesson ? (
+                    <Link to={lessonLink(previousLesson)} className="inline-flex items-center gap-1.5 rounded-full border border-forest/15 bg-white px-4 py-2.5 text-sm font-semibold text-forest transition hover:bg-mint">
+                      <ChevronLeft size={16} /> Previous
+                    </Link>
+                  ) : null}
+                  {followingLesson ? (
+                    <Link to={lessonLink(followingLesson)} className="inline-flex items-center gap-1.5 rounded-full bg-leaf px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest">
+                      Next lesson <ChevronRight size={16} />
+                    </Link>
+                  ) : null}
                 </div>
               </div>
             ) : null}
           </div>
-        </div>
 
-        {/* VIDEO */}
-        <div className="mt-7">
-          {!selectedVideo ? (
-            <div className="rounded-[1.5rem] border border-forest/10 bg-white p-6 shadow-sm sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-5">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-forest">
-                    {completedCount} of {playableCount} {playableCount === 1 ? "lesson" : "lessons"} completed
-                  </p>
-                  <h2 className="mt-1 break-words text-xl font-extrabold text-ink">
-                    {next.lesson ? next.lesson.title : "No lessons available yet"}
-                  </h2>
-                  {next.state === "resume" && saved[next.lesson.id] ? (
-                    <p className="mt-1 text-sm text-slate-500">You stopped at {formatTime(saved[next.lesson.id].position)}</p>
-                  ) : null}
-                  <div className="mt-3 h-2 max-w-md overflow-hidden rounded-full bg-gray-100">
-                    <div className="h-full rounded-full bg-leaf" style={{ width: `${playableCount ? Math.round((completedCount / playableCount) * 100) : 0}%` }} />
-                  </div>
-                </div>
-                {next.lesson && progress ? (
-                  <Link to={lessonLink(next.lesson)} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-leaf px-6 py-3 text-sm font-bold text-white transition hover:bg-forest">
-                    <PlayCircle size={18} />
-                    {{ start: "Start learning", resume: "Continue learning", next: "Next lesson", again: "Watch again" }[next.state]}
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          ) : secureVideoId && !progress ? (
-            <div className="flex aspect-video items-center justify-center rounded-[1.5rem] bg-black sm:rounded-[2rem]">
-              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            </div>
-          ) : secureVideoId ? (
-            <div className="relative overflow-hidden rounded-[1.5rem] border border-black/5 bg-black shadow-2xl shadow-forest/10 sm:rounded-[2rem]">
-              {/* Top Video Bar */}
-              <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent px-4 py-4 sm:px-6 sm:py-5">
-                <div className="flex min-w-0 items-center gap-2 text-white">
-                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/15 backdrop-blur-md">
-                    <PlayCircle size={16} />
-                  </div>
-
-                  <p className="truncate text-xs font-semibold sm:text-sm">
-                    {title}
-                  </p>
-                </div>
-
-                <span className="hidden rounded-full bg-black/25 px-3 py-1.5 text-[10px] font-semibold text-white/80 backdrop-blur-md sm:block">
-                  Secure Playback
-                </span>
-              </div>
-
-              <ProtectedVideo
-                key={selectedVideo.id}
-                title={title}
-                courseId={course.id}
-                videoId={selectedVideo.id}
-                startAt={startAt}
-                onProgress={(position, duration, completed) => handleProgress(selectedVideo.id, position, duration, completed)}
-              />
-            </div>
-          ) : (
-            <div className="flex min-h-[350px] items-center justify-center rounded-[1.5rem] border border-dashed border-forest/20 bg-white p-8 text-center shadow-sm sm:min-h-[450px] sm:rounded-[2rem]">
-              <div className="max-w-sm">
-                <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-mint text-forest">
-                  <Video size={28} />
-                </div>
-
-                <h2 className="mt-5 text-lg font-bold text-ink">
-                  {selectedVideo?.upcoming ? "This lesson is coming soon" : "No video available"}
-                </h2>
-
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {selectedVideo?.upcoming
-                    ? "It will unlock here automatically once it's published. Meanwhile, continue with the available lessons."
-                    : "No video is available for this course yet."}
+          {/* Course content */}
+          {orderedLessons.length > 0 ? (
+            <aside aria-label="Course content" className="flex flex-col overflow-hidden rounded-2xl border border-forest/10 bg-white shadow-sm lg:sticky lg:top-[86px] lg:max-h-[calc(100vh-102px)]">
+              <div className="border-b border-gray-100 px-5 py-4">
+                <h2 className="text-base font-bold text-ink">Course content</h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {playableCount} {playableCount === 1 ? "lesson" : "lessons"} available
+                  {orderedLessons.length > playableCount ? ` · ${orderedLessons.length - playableCount} upcoming` : ""}
                 </p>
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* LESSONS */}
-        {orderedLessons.length > 0 ? (
-          <section className="mt-10">
-            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-leaf">
-                  Course Content
-                </p>
-
-                <h2 className="mt-1 text-xl font-extrabold text-ink sm:text-2xl">
-                  All Lessons
-                </h2>
-              </div>
-
-              <p className="text-xs font-medium text-slate-500">
-                {course.videos.filter((v) => !v.upcoming).length} lessons available
-                {course.videos.some((v) => v.upcoming) ? ` · ${course.videos.filter((v) => v.upcoming).length} upcoming` : ""}
-              </p>
-            </div>
-
-            <div className="mt-5 overflow-hidden rounded-2xl border border-forest/10 bg-white shadow-sm">
-              <div className="divide-y divide-gray-100">
-                {groups.map((group) => (
-                <Fragment key={group.id || "content"}>
-                {showModules ? (
-                  <div className="flex items-center justify-between gap-3 bg-gray-50 px-4 py-3 sm:px-5">
-                    <h3 className="min-w-0 truncate text-sm font-bold text-ink">{group.title}</h3>
-                    {group.upcoming ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
-                        <Lock size={11} /> Coming soon
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-                {group.lessons.map((v) => {
-                  const i = orderedLessons.indexOf(v)
-                  const isActive = selectedVideo?.id === v.id
-
-                  if (v.upcoming) {
-                    return (
-                      <div
-                        key={v.id || i}
-                        className="flex items-center gap-3 bg-[#f8faf6] px-4 py-4 sm:px-5"
-                        aria-disabled="true"
-                      >
-                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gray-100 text-slate-400">
-                          <Lock size={16} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-ink/55">{v.title}</p>
-                          <p className="mt-1 text-[11px] font-medium text-slate-400">Unlocks soon</p>
-                        </div>
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
-                          <Lock size={11} /> Upcoming
-                        </span>
-                      </div>
-                    )
-                  }
-
+              <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto">
+                {groups.map((group) => {
+                  const open = isGroupOpen(group)
+                  const groupPlayable = group.lessons.filter((v) => !v.upcoming)
+                  const groupDone = groupPlayable.filter((v) => saved[v.id]?.completed).length
                   return (
-                    <Link
-                      key={v.id || i}
-                      to={lessonLink(v)}
-                      className={`group flex items-center gap-3 px-4 py-4 transition sm:px-5 ${
-                        isActive
-                          ? "bg-mint/60"
-                          : "bg-white hover:bg-gray-50"
-                      }`}
-                    >
-                      {/* Number */}
-                      <div
-                        className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold transition ${
-                          isActive
-                            ? "bg-leaf text-white shadow-sm"
-                            : "bg-gray-100 text-slate-500 group-hover:bg-mint group-hover:text-forest"
-                        }`}
-                      >
-                        {isActive ? (
-                          <PlayCircle size={17} />
-                        ) : saved[v.id]?.completed ? (
-                          <CheckCircle2 size={17} aria-label="Completed" />
-                        ) : (
-                          String(i + 1).padStart(2, "0")
-                        )}
-                      </div>
-
-                      {/* Lesson */}
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={`truncate text-sm font-semibold ${
-                            isActive
-                              ? "text-forest"
-                              : "text-ink"
-                          }`}
+                    <div key={group.id || "content"}>
+                      {showModules ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(group)}
+                          aria-expanded={open}
+                          className="flex w-full items-center gap-3 bg-gray-50 px-5 py-3.5 text-left transition hover:bg-gray-100"
                         >
-                          {v.title}
-                        </p>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-bold text-ink">{group.title}</span>
+                            <span className="mt-0.5 block text-xs text-slate-500">
+                              {group.upcoming ? "Coming soon" : `${groupDone} of ${groupPlayable.length} completed`}
+                            </span>
+                          </span>
+                          {group.upcoming ? <Lock size={14} className="shrink-0 text-amber-700" /> : null}
+                          <ChevronDown size={16} className={`shrink-0 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
+                        </button>
+                      ) : null}
 
-                        {isActive ? (
-                          <p className="mt-1 text-[11px] font-medium text-leaf">
-                            Currently playing
-                          </p>
-                        ) : saved[v.id]?.completed ? (
-                          <p className="mt-1 text-[11px] font-medium text-leaf">Completed</p>
-                        ) : saved[v.id] ? (
-                          <p className="mt-1 text-[11px] font-medium text-slate-500">Stopped at {formatTime(saved[v.id].position)}</p>
-                        ) : null}
-                      </div>
+                      {open ? (
+                        <ul>
+                          {group.lessons.map((v) => {
+                            const isActive = selectedVideo?.id === v.id
+                            const record = saved[v.id]
+                            const number = String(orderedLessons.indexOf(v) + 1).padStart(2, "0")
 
-                      {/* Duration */}
-                      <div className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-slate-400">
-                        <Clock3 size={13} />
-                        <span>{v.duration}</span>
-                      </div>
+                            if (v.upcoming) {
+                              return (
+                                <li key={v.id} className="flex items-center gap-3 px-5 py-3 text-slate-400" aria-disabled="true">
+                                  <Lock size={15} className="w-7 shrink-0" />
+                                  <span className="min-w-0 flex-1 truncate text-sm">{v.title}</span>
+                                  <span className="shrink-0 text-xs">Upcoming</span>
+                                </li>
+                              )
+                            }
 
-                      <ChevronRight
-                        size={16}
-                        className={`shrink-0 transition ${
-                          isActive
-                            ? "text-leaf"
-                            : "text-slate-300 group-hover:translate-x-0.5 group-hover:text-forest"
-                        }`}
-                      />
-                    </Link>
+                            return (
+                              <li key={v.id}>
+                                <Link
+                                  to={lessonLink(v)}
+                                  aria-current={isActive ? "true" : undefined}
+                                  className={`flex items-center gap-3 border-l-[3px] py-3 pl-[17px] pr-5 transition ${isActive ? "border-leaf bg-mint/50" : "border-transparent hover:bg-gray-50"}`}
+                                >
+                                  <span className={`grid w-7 shrink-0 place-items-center text-xs font-semibold ${record?.completed || isActive ? "text-forest" : "text-slate-400"}`}>
+                                    {isActive ? <PlayCircle size={17} aria-label="Now playing" /> : record?.completed ? <CheckCircle2 size={17} aria-label="Completed" /> : number}
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className={`block text-sm leading-5 ${isActive ? "font-semibold text-forest" : "text-ink"}`}>{v.title}</span>
+                                    {!record?.completed && record && !isActive ? (
+                                      <span className="mt-0.5 block text-xs text-slate-500">Stopped at {formatTime(record.position)}</span>
+                                    ) : null}
+                                  </span>
+                                  {v.duration ? <span className="shrink-0 text-xs text-slate-400">{v.duration}</span> : null}
+                                </Link>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      ) : null}
+                    </div>
                   )
                 })}
-                </Fragment>
-                ))}
               </div>
-            </div>
-          </section>
-        ) : null}
+            </aside>
+          ) : null}
+        </div>
       </div>
     </main>
   )

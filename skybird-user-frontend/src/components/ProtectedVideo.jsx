@@ -3,7 +3,7 @@ import Hls from "hls.js";
 import playerjs from "player.js";
 import { useUser } from "../context/UserContext";
 import API from "../api/axios";
-import { Lock, ShieldAlert, Maximize, Minimize } from "lucide-react";
+import { ShieldAlert, Maximize, Minimize } from "lucide-react";
 
 // Same API address as the rest of the site (including its production fallback).
 const API_BASE = API.defaults.baseURL.replace(/\/+$/, "");
@@ -368,7 +368,7 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
     <div className="select-none">
       <div
         ref={containerRef}
-        className="relative overflow-hidden rounded-2xl bg-black shadow-2xl aspect-video w-full flex items-center justify-center"
+        className="relative overflow-hidden bg-black aspect-video w-full flex items-center justify-center"
         onContextMenu={(e) => e.preventDefault()}
         onDragStart={(e) => e.preventDefault()}
         style={{ backgroundColor: "#000" }}
@@ -445,15 +445,6 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
         )}
       </div>
 
-      <div className="mt-3.5 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-bold text-ink">{title}</h2>
-          <p className="mt-0.5 flex items-center gap-1 text-xs text-ink/60">
-            <Lock className="h-3 w-3 text-leaf" />
-            Protected streaming • purchase authorization • short-lived access
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

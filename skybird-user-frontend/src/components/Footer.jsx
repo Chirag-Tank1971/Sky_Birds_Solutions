@@ -338,12 +338,9 @@ export default function Footer() {
             <Link to="/terms" className="transition hover:text-emerald-300">
               Terms
             </Link>
-            <a
-              href={`mailto:${email}`}
-              className="transition hover:text-emerald-300"
-            >
+            <Link to="/contact" className="transition hover:text-emerald-300">
               Support
-            </a>
+            </Link>
           </div>
         </div>
       </div>
