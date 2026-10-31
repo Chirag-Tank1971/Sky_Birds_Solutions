@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
+import { Video,
   Bell,
   MessageSquare,
   ShoppingCart,
@@ -22,6 +22,7 @@ const ACTIVITY_ICONS = {
   query: { icon: MessageSquare, className: 'bg-blue-50 text-blue-600' },
   purchase: { icon: ShoppingCart, className: 'bg-green-50 text-green-600' },
   signup: { icon: UserPlus, className: 'bg-purple-50 text-purple-600' },
+  video: { icon: Video, className: 'bg-emerald-50 text-emerald-600' },
 };
 
 const ALERT_STYLES = {

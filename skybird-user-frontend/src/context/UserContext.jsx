@@ -239,6 +239,7 @@ export function UserProvider({ children }) {
     hasCourse,
     refreshPurchased,
     updateUser,
+    setToken,
   }), [
     user, token, isAuthenticated, loading, purchasedCourses, purchasesStatus, sendOtp, verifyOtp,
     loginWithPassword, registerWithPassword, resetPassword, logout, hasCourse,

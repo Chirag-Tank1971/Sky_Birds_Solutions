@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
-import { BarChart3, CalendarDays, Clock3, Lock, PlayCircle, Sparkles, Store } from "lucide-react";
+import { Layers, BarChart3, CalendarDays, Clock3, Lock, PlayCircle, Sparkles, Store } from "lucide-react";
+import { moduleSummary } from "../data/courseModules";
 import { formatPrice } from "../data/courses";
 import { useUser } from "../context/UserContext";
 import RollText from "./RollText";
@@ -15,6 +16,7 @@ export default function CourseCard({ course, size = "md" }) {
   const upcomingLessons = (course.videos || []).filter((video) => video.upcoming).length;
   const lessons = (course.videos?.length ? course.videos.length - upcomingLessons : Number(course.lessons)) || 0;
   const upcoming = course.status === "upcoming";
+  const modules = moduleSummary(course);
   const large = size === "lg";
   const href = owned ? `/watch/${course.id}` : `/courses/${course.id}`;
 
@@ -94,6 +96,12 @@ export default function CourseCard({ course, size = "md" }) {
             </span>
           ) : null}
         </li>
+        {modules ? (
+          <li className="flex items-center gap-2.5">
+            <Layers size={17} className="shrink-0 text-ink/70" />
+            {modules}
+          </li>
+        ) : null}
         {course.duration ? (
           <li className="flex items-center gap-2.5">
             <Clock3 size={17} className="shrink-0 text-ink/70" />

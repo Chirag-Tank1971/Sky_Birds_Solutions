@@ -65,6 +65,16 @@ export async function verifyContactOtp({ identifier, otp, accessToken }) {
   return data
 }
 
+export async function getTransactions() {
+  const { data } = await API.get("/customer/transactions")
+  return data
+}
+
+export async function changePassword({ currentPassword, newPassword }) {
+  const { data } = await API.post("/customer/password", { currentPassword, newPassword })
+  return data
+}
+
 export async function getPurchasedCourses() {
   const { data } = await API.get("/customer/purchased")
   return data

@@ -18,6 +18,7 @@ export default function Navbar() {
   const [hovered, setHovered] = useState(null);
   const [navHover, setNavHover] = useState(null);
   const navigate = useNavigate();
+  const navLinks = isAuthenticated ? [...links, { to: "/dashboard", label: "Dashboard" }] : links;
 
   const handleLogout = () => {
     logout();
@@ -66,7 +67,7 @@ export default function Navbar() {
               className="hidden items-center gap-0.5 rounded-full bg-white/[0.06] p-1 ring-1 ring-white/10 md:flex"
               onMouseLeave={() => setNavHover(null)}
             >
-              {links.map((link) => (
+              {navLinks.map((link) => (
                 <NavLink
                   key={link.to}
                   to={link.to}
@@ -155,7 +156,7 @@ export default function Navbar() {
               transition={{ type: "spring", bounce: 0.15, duration: 0.35 }}
             >
               <nav className="flex flex-col" onMouseLeave={() => setHovered(null)}>
-                {[...links, ...(isAuthenticated ? [{ to: "/dashboard", label: "My Dashboard" }] : [])].map((link, index) => (
+                {navLinks.map((link, index) => (
                   <motion.div
                     key={link.to}
                     initial={{ opacity: 0, x: 8 }}

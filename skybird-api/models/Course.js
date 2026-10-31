@@ -12,6 +12,20 @@ const videoSchema = new mongoose.Schema({
   provider: { type: String, enum: ["local", "bunny"], default: "local" },
   // Shown to learners as "Upcoming" (locked); may have no video yet and can't be played.
   upcoming: { type: Boolean, default: false },
+  // Module this lesson belongs to; empty = the default "Course content" group.
+  moduleId: { type: String, default: "" },
+  // Video state recorded from Bunny for the admin. Never changes what learners can see.
+  processingSince: { type: Date, default: null },
+  readyAt: { type: Date, default: null },
+  videoFailedAt: { type: Date, default: null },
+}, { _id: false });
+
+const moduleSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  title: { type: String, required: true, maxlength: 200 },
+  description: { type: String, default: "", maxlength: 1000 },
+  // Locks every lesson inside. Modules start locked and are published by an admin.
+  upcoming: { type: Boolean, default: true },
 }, { _id: false });
 
 const courseSchema = new mongoose.Schema(
@@ -32,13 +46,14 @@ const courseSchema = new mongoose.Schema(
     // Legacy field retained only so old documents remain readable by admins.
     videoUrl: { type: String, default: "" },
     videos: [videoSchema],
+    modules: [moduleSchema],
     // live: listed + purchasable · upcoming: listed as "coming soon", not purchasable ·
     // private: direct link only, purchasable · unlive: hidden. Buyers keep access in every status.
     status: { type: String, enum: ["live", "upcoming", "private", "unlive"], default: "live" },
     // Legacy flag kept in sync with status (true unless unlive) for older clients.
     isActive: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
 
 // Which statuses allow what. Documents created before `status` existed have none: fall back to isActive.

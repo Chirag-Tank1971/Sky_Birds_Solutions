@@ -13,10 +13,12 @@ const connectDB = require("./config/db");
 const app = require("./app");
 const { startVideoWorker } = require("./services/videoService");
 const { startReservationSweeper } = require("./services/purchaseService");
+const { startVideoStateSweeper } = require("./services/videoState");
 
 connectDB();
 startVideoWorker();
 startReservationSweeper();
+startVideoStateSweeper();
 
 const PORT = process.env.PORT || 5000;
 

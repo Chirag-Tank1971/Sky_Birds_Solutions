@@ -33,6 +33,19 @@ const {
   deleteCustomer,
   getStats,
 } = require("../controllers/adminController");
+const {
+  createModule,
+  updateModule,
+  deleteModule,
+  reorderModules,
+  publishModule,
+  unpublishModule,
+  createBulkLessons,
+  getBunnyVideoStatuses,
+  signBunnyUpload,
+  getCourseActivity,
+} = require("../controllers/moduleController");
+const rateLimit = require("../middleware/rateLimit");
 const { getAdminSiteContent, updateSiteContent } = require("../controllers/siteController");
 const {
   getAdminTestimonials,
@@ -84,7 +97,9 @@ router.post("/upload/video", upload.single("video"), uploadVideo);
 router.get("/videos/:videoId/status", getVideoProcessingStatus);
 // Bunny Stream lesson videos: signed direct upload, encoding status, signed preview link.
 router.post("/videos/bunny/uploads", createBunnyUpload);
+router.post("/videos/bunny/status", getBunnyVideoStatuses);
 router.get("/videos/bunny/:videoId/status", getBunnyVideoStatus);
+router.post("/videos/bunny/:videoId/upload-signature", signBunnyUpload);
 router.post("/videos/bunny/:videoId/preview", getBunnyPreview);
 
 // Short-lived, admin-only authorization for previewing a private HLS upload.
@@ -135,6 +150,19 @@ router.put(
 router.delete("/courses/:id", deleteCourse);
 router.post("/courses/:id/videos", addVideoToCourse);
 router.patch("/courses/:id/status", setCourseStatus);
+router.get("/courses/:id/activity", getCourseActivity);
+router.post("/courses/:id/modules", createModule);
+// Registered before "/courses/:id/modules/:moduleId" so "order" isn't read as a module id.
+router.put("/courses/:id/modules/order", reorderModules);
+router.put("/courses/:id/modules/:moduleId", updateModule);
+router.delete("/courses/:id/modules/:moduleId", deleteModule);
+router.post("/courses/:id/modules/:moduleId/publish", publishModule);
+router.post("/courses/:id/modules/:moduleId/unpublish", unpublishModule);
+router.post(
+  "/courses/:id/modules/:moduleId/lessons/bulk",
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: "Too many bulk uploads. Please try again later." }),
+  createBulkLessons
+);
 // Registered before "/courses/:id/videos/:videoId" so "order" isn't read as a lesson id.
 router.put("/courses/:id/videos/order", reorderLessons);
 router.put("/courses/:id/videos/:videoId", updateLesson);

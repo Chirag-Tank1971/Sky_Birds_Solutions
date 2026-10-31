@@ -9,13 +9,12 @@ const bunnyStream = require("../services/bunnyStream");
 const { isConfigured, uploadStream } = require("../config/cloudinary");
 const { processVideo, enqueueVideo, getVideoStatus, deleteVideoFiles, cleanupTempFile, validateVideoId } = require("../services/videoService");
 const { rejectOversizedThumbnail } = require("../middleware/upload");
+const { CourseEditError, findCourse, editCourse, sendEditError, recordAudit } = require("../services/courseEditing");
+const { hasPlayableLesson, moduleOf } = require("../services/courseContent");
+const { checkVideo, goLiveProblem } = require("../services/videoReadiness");
+const { syncCourseVideos } = require("../services/videoState");
 
 const newLessonId = () => `vid-${crypto.randomUUID().slice(0, 8)}`;
-
-const findCourse = async (idOrObjectId) => {
-  const id = String(idOrObjectId || "");
-  return (await Course.findOne({ id })) || (/^[a-f\d]{24}$/i.test(id) ? await Course.findById(id) : null);
-};
 
 // Delete the files of videos no course lesson or testimonial points to any more.
 const deleteUnusedVideos = async (videoIds) => {
@@ -33,14 +32,51 @@ const deleteUnusedVideos = async (videoIds) => {
   }
 };
 
-// Live and private courses can be bought, so they need at least one lesson with a video.
-const statusProblem = (status, videos) => {
-  if (!Course.COURSE_STATUSES.includes(status)) return "Invalid course status";
-  if ((status === "live" || status === "private") && !(videos || []).some((video) => video.videoId && !video.upcoming)) {
-    return "Add at least one published lesson with a video before making the course live or private.";
-  }
-  return null;
+const STILL_NOT_READY = {
+  processing: "Video is still processing",
+  not_uploaded: "The video upload isn't complete",
+  failed: "This video failed. Upload it again",
+  missing: "Upload a video before publishing this lesson",
 };
+
+const assertPlayableIfSold = (course, message) => {
+  if (["live", "private"].includes(Course.statusOf(course)) && !hasPlayableLesson(course)) {
+    throw new CourseEditError(400, message);
+  }
+};
+
+// Throws unless Bunny (or local storage) confirms this lesson's video is ready right now.
+const assertVideoReady = async (lesson) => {
+  const check = await checkVideo(lesson);
+  if (check.state === "ready") return;
+  if (check.state === "unknown") throw new CourseEditError(503, "Couldn't confirm the video with the video service. Please retry.");
+  const progress = check.state === "processing" && check.progress ? ` (${check.progress}%)` : "";
+  throw new CourseEditError(409, `${STILL_NOT_READY[check.state] || "The video isn't ready"}${progress}.`);
+};
+
+// A whole lesson list sent by the admin form. Publishing and video state stay server-owned:
+// a lesson can only stay published with the same video; new or replaced ones start locked.
+const submittedLessons = (submitted, current = [], modules = []) =>
+  submitted.map((video) => {
+    const previous = current.find((lesson) => lesson.id === video.id);
+    const videoId = video.videoId || "";
+    const sameVideo = Boolean(previous) && previous.videoId === videoId;
+    const provider = sameVideo ? previous.provider : video.provider === "bunny" ? "bunny" : "local";
+    const moduleId = video.moduleId ?? previous?.moduleId ?? "";
+    return {
+      id: video.id || newLessonId(),
+      title: video.title || "Lesson",
+      duration: video.duration || "",
+      videoId,
+      provider,
+      upcoming: !sameVideo || previous.upcoming || Boolean(video.upcoming),
+      moduleId: modules.some((item) => item.id === moduleId) ? moduleId : "",
+      processingSince: sameVideo ? previous.processingSince : videoId && provider === "bunny" ? new Date() : null,
+      readyAt: sameVideo ? previous.readyAt : null,
+      videoFailedAt: sameVideo ? previous.videoFailedAt : null,
+      link: "",
+    };
+  });
 
 const videoIdsOf = (videos) => (videos || []).map((video) => video.videoId).filter(Boolean);
 
@@ -328,16 +364,7 @@ exports.createCourse = async (req, res) => {
       });
     }
 
-    parsedVideos = parsedVideos.map((video) => ({
-      id: video.id || newLessonId(),
-      title: video.title,
-      duration: video.duration || "",
-      videoId: video.videoId || "",
-      provider: video.provider === "bunny" ? "bunny" : "local",
-
-      upcoming: Boolean(video.upcoming),
-      link: "",
-    }));
+    parsedVideos = submittedLessons(parsedVideos);
 
     const course = await Course.create({
       id,
@@ -415,16 +442,7 @@ exports.updateCourse = async (req, res) => {
       updateData.videos = JSON.parse(updateData.videos);
     }
     if (Array.isArray(updateData.videos)) {
-      updateData.videos = updateData.videos.map((video) => ({
-        id: video.id || newLessonId(),
-        title: video.title || "Lesson",
-        duration: video.duration || "",
-        videoId: video.videoId || "",
-        provider: video.provider === "bunny" ? "bunny" : "local",
-
-        upcoming: Boolean(video.upcoming),
-        link: "",
-      }));
+      updateData.videos = submittedLessons(updateData.videos, existing.videos, existing.modules);
     }
     updateData.videoUrl = "";
 
@@ -436,21 +454,35 @@ exports.updateCourse = async (req, res) => {
     }
 
     if (Object.prototype.hasOwnProperty.call(updateData, "status")) {
-      const problem = statusProblem(updateData.status, updateData.videos || existing.videos);
-      if (problem) return res.status(400).json({ success: false, message: problem });
+      if (!Course.COURSE_STATUSES.includes(updateData.status)) {
+        return res.status(400).json({ success: false, message: "Invalid course status" });
+      }
+      if (updateData.status === "live" || updateData.status === "private") {
+        const problem = await goLiveProblem({ modules: existing.modules, videos: updateData.videos || existing.videos });
+        if (problem) return res.status(problem.statusCode).json({ success: false, message: problem.message });
+      }
       updateData.isActive = updateData.status !== "unlive";
+    }
+    if (updateData.videos) {
+      const nextStatus = updateData.status || Course.statusOf(existing);
+      if (["live", "private"].includes(nextStatus) && !hasPlayableLesson({ modules: existing.modules, videos: updateData.videos })) {
+        return res.status(400).json({ success: false, message: "A live course needs at least one published lesson." });
+      }
+      updateData.$inc = { __v: 1 };
     }
 
     const previousVideoIds = videoIdsOf(existing.videos);
-    const course = await Course.findByIdAndUpdate(existing._id, updateData, {
+    // A lesson list replaces the whole array, so it must not overwrite a change made since it was read.
+    const target = updateData.videos ? { _id: existing._id, __v: existing.__v ?? null } : { _id: existing._id };
+    const course = await Course.findOneAndUpdate(target, updateData, {
       new: true,
       runValidators: true,
     });
 
     if (!course) {
-      return res.status(404).json({
+      return res.status(updateData.videos ? 409 : 404).json({
         success: false,
-        message: "Course not found",
+        message: updateData.videos ? "This course was changed elsewhere. Please refresh and try again." : "Course not found",
       });
     }
 
@@ -524,16 +556,13 @@ exports.getAllCoursesAdmin = async (req, res) => {
 
 exports.addVideoToCourse = async (req, res) => {
   try {
-    const { title, duration, videoId, link, provider } = req.body;
-    const upcoming = req.body?.upcoming === true;
+    const { duration, videoId, link, provider } = req.body || {};
+    const title = String(req.body?.title || "").trim().slice(0, 200);
+    // Lessons start locked. Asking for a published lesson only works with a video that's ready now.
+    let upcoming = req.body?.upcoming !== false;
     if (!title || (!videoId && !link && !upcoming)) {
       return res.status(400).json({ success: false, message: "title and videoId are required" });
     }
-
-    let course = await Course.findOne({ id: req.params.id });
-    if (!course) course = await Course.findById(req.params.id);
-    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
-
     if (!videoId && !upcoming) {
       return res.status(400).json({
         success: false,
@@ -542,22 +571,33 @@ exports.addVideoToCourse = async (req, res) => {
     }
     if (videoId && !validateVideoId(videoId)) return res.status(400).json({ success: false, message: "Invalid video" });
 
-    course.videos.push({
-      id: newLessonId(),
-      title,
-      duration: duration || "",
-      videoId: videoId || "",
-      provider: provider === "bunny" ? "bunny" : "local",
-      upcoming,
-      link: "",
-    });
-    course.videoUrl = "";
-    course.lessons = course.videos.length;
-    await course.save();
+    const safeProvider = provider === "bunny" ? "bunny" : "local";
+    if (!upcoming) {
+      const { state } = await checkVideo({ videoId, provider: safeProvider });
+      if (state !== "ready") upcoming = true;
+    }
 
-    res.status(200).json({ success: true, message: "Video added", data: course });
+    const moduleId = req.body?.moduleId ? String(req.body.moduleId) : "";
+    const { course } = await editCourse(req.params.id, (doc) => {
+      if (moduleId && !doc.modules.some((item) => item.id === moduleId)) throw new CourseEditError(400, "Module not found");
+      doc.videos.push({
+        id: newLessonId(),
+        title,
+        duration: duration ? String(duration).trim().slice(0, 40) : "",
+        videoId: videoId || "",
+        provider: safeProvider,
+        moduleId,
+        upcoming,
+        processingSince: videoId && safeProvider === "bunny" ? new Date() : null,
+        link: "",
+      });
+      doc.videoUrl = "";
+      doc.lessons = doc.videos.length;
+    });
+
+    return res.status(200).json({ success: true, message: "Video added", data: course });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return sendEditError(res, error, "Add lesson failed", "Unable to add the lesson");
   }
 };
 
@@ -568,6 +608,8 @@ exports.getCourseAdmin = async (req, res) => {
     if (!course) return res.status(404).json({ success: false, message: "Course not found" });
     const data = course.toObject();
     data.status = Course.statusOf(data);
+    // Fallback for missed webhooks: refresh recorded video state in the background.
+    syncCourseVideos(data).catch((error) => console.error("Course video sync failed:", error.message));
     return res.status(200).json({ success: true, data });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Unable to load the course" });
@@ -576,117 +618,132 @@ exports.getCourseAdmin = async (req, res) => {
 
 exports.setCourseStatus = async (req, res) => {
   try {
-    const course = await findCourse(req.params.id);
-    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
     const status = String(req.body?.status || "");
-    const problem = statusProblem(status, course.videos);
-    if (problem) return res.status(400).json({ success: false, message: problem });
-    course.status = status;
-    course.isActive = status !== "unlive";
-    await course.save();
+    if (!Course.COURSE_STATUSES.includes(status)) throw new CourseEditError(400, "Invalid course status");
+    const { course } = await editCourse(req.params.id, async (doc) => {
+      if (status === "live" || status === "private") {
+        const problem = await goLiveProblem(doc);
+        if (problem) throw new CourseEditError(problem.statusCode, problem.message);
+      }
+      doc.status = status;
+      doc.isActive = status !== "unlive";
+    });
+    await recordAudit(req, course, `course_${status}`, "course", { id: course.id, title: course.title });
     return res.status(200).json({ success: true, message: `Course is now ${status}`, data: course });
   } catch (error) {
-    console.error("Set course status failed:", error.message);
-    return res.status(500).json({ success: false, message: "Unable to change the course status" });
+    return sendEditError(res, error, "Set course status failed", "Unable to change the course status");
   }
 };
 
-// Rename a lesson or replace its video; the old video is cleaned up if nothing else uses it.
+// Rename, move, publish or unpublish a lesson, or replace its video; the old video is cleaned up if nothing else uses it.
 exports.updateLesson = async (req, res) => {
+  const { title, duration, videoId, provider, moduleId, upcoming } = req.body || {};
+  const replacing = videoId !== undefined;
   try {
-    const course = await findCourse(req.params.id);
-    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
-    const lesson = course.videos.find((v) => v.id === req.params.videoId);
-    if (!lesson) return res.status(404).json({ success: false, message: "Lesson not found" });
-
-    const { title, duration, videoId, provider } = req.body || {};
-    if (title !== undefined) {
-      const clean = String(title).trim();
-      if (!clean) return res.status(400).json({ success: false, message: "Lesson title is required" });
-      lesson.title = clean.slice(0, 200);
-    }
-    if (duration !== undefined) lesson.duration = String(duration).trim().slice(0, 40);
+    if (replacing && !validateVideoId(videoId)) throw new CourseEditError(400, "Invalid video");
+    const safeProvider = provider === "bunny" ? "bunny" : "local";
+    let lesson;
     let replaced = null;
-    if (videoId !== undefined && videoId !== lesson.videoId) {
-      if (!validateVideoId(videoId)) return res.status(400).json({ success: false, message: "Invalid video" });
-      replaced = lesson.videoId;
-      lesson.videoId = videoId;
-      lesson.provider = provider === "bunny" ? "bunny" : "local";
-    }
-    if (req.body?.upcoming !== undefined) {
-      const upcoming = req.body.upcoming === true;
-      if (!upcoming && !lesson.videoId) {
-        return res.status(400).json({ success: false, message: "Upload a video before publishing this lesson." });
+    let held = false;
+    let moved = false;
+    const { course } = await editCourse(req.params.id, async (doc) => {
+      lesson = doc.videos.find((v) => v.id === req.params.videoId);
+      if (!lesson) throw new CourseEditError(404, "Lesson not found");
+      replaced = null;
+      held = false;
+      moved = false;
+
+      if (title !== undefined) {
+        const clean = String(title).trim();
+        if (!clean) throw new CourseEditError(400, "Lesson title is required");
+        lesson.title = clean.slice(0, 200);
       }
-      if (upcoming && ["live", "private"].includes(Course.statusOf(course)) && !course.videos.some((v) => v.id !== lesson.id && v.videoId && !v.upcoming)) {
-        return res.status(400).json({ success: false, message: "A live course needs at least one published lesson." });
+      if (duration !== undefined) lesson.duration = String(duration).trim().slice(0, 40);
+
+      if (moduleId !== undefined && String(moduleId) !== lesson.moduleId) {
+        const target = String(moduleId);
+        if (target && !doc.modules.some((item) => item.id === target)) throw new CourseEditError(400, "Module not found");
+        lesson.moduleId = target;
+        moved = true;
       }
-      lesson.upcoming = upcoming;
-    }
-    await course.save();
+
+      if (replacing && videoId !== lesson.videoId) {
+        replaced = lesson.videoId;
+        lesson.videoId = videoId;
+        lesson.provider = safeProvider;
+        if (duration === undefined) lesson.duration = "";
+        lesson.processingSince = safeProvider === "bunny" ? new Date() : null;
+        lesson.readyAt = null;
+        lesson.videoFailedAt = null;
+        // Learners must not land on a video that's still processing: hold the lesson until it's published again.
+        if (upcoming !== false && !lesson.upcoming) {
+          const { state } = await checkVideo(lesson);
+          if (state !== "ready") {
+            lesson.upcoming = true;
+            held = true;
+          }
+        }
+      }
+
+      if (upcoming === false) {
+        if (!lesson.videoId) throw new CourseEditError(400, "Upload a video before publishing this lesson.");
+        if (moduleOf(doc, lesson)?.upcoming) throw new CourseEditError(409, "Publish the module to make this lesson available.");
+        await assertVideoReady(lesson);
+        lesson.upcoming = false;
+      } else if (upcoming === true) {
+        lesson.upcoming = true;
+      }
+
+      assertPlayableIfSold(doc, "A live course needs at least one published lesson.");
+    });
+
     if (replaced) await deleteUnusedVideos([replaced]);
-    return res.status(200).json({ success: true, message: "Lesson updated", data: course });
+    if (moved) await recordAudit(req, course, "lesson_moved", "lesson", lesson);
+    if (upcoming === false) await recordAudit(req, course, "lesson_published", "lesson", lesson);
+    if (upcoming === true || held) await recordAudit(req, course, "lesson_unpublished", "lesson", lesson);
+    return res.status(200).json({
+      success: true,
+      message: held ? "Video replaced. Publish the lesson again when it finishes processing." : "Lesson updated",
+      data: course,
+    });
   } catch (error) {
-    console.error("Update lesson failed:", error.message);
-    return res.status(500).json({ success: false, message: "Unable to update the lesson" });
+    // The replacement upload was never attached, so don't leave it stored.
+    if (replacing) await deleteUnusedVideos([videoId]);
+    return sendEditError(res, error, "Update lesson failed", "Unable to update the lesson");
   }
 };
 
 exports.reorderLessons = async (req, res) => {
   try {
-    const course = await findCourse(req.params.id);
-    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
     const order = Array.isArray(req.body?.order) ? req.body.order.map(String) : null;
-    const ids = course.videos.map((v) => v.id);
-    if (!order || order.length !== ids.length || new Set(order).size !== ids.length || order.some((lessonId) => !ids.includes(lessonId))) {
-      return res.status(400).json({ success: false, message: "The new order must list every lesson exactly once" });
-    }
-    course.videos = order.map((lessonId) => course.videos.find((v) => v.id === lessonId));
-    await course.save();
+    const { course } = await editCourse(req.params.id, (doc) => {
+      const ids = doc.videos.map((v) => v.id);
+      if (!order || order.length !== ids.length || new Set(order).size !== ids.length || order.some((lessonId) => !ids.includes(lessonId))) {
+        throw new CourseEditError(400, "The new order must list every lesson exactly once");
+      }
+      doc.videos = order.map((lessonId) => doc.videos.find((v) => v.id === lessonId));
+    });
     return res.status(200).json({ success: true, message: "Lessons reordered", data: course });
   } catch (error) {
-    console.error("Reorder lessons failed:", error.message);
-    return res.status(500).json({ success: false, message: "Unable to reorder lessons" });
+    return sendEditError(res, error, "Reorder lessons failed", "Unable to reorder lessons");
   }
 };
 
 exports.removeVideoFromCourse = async (req, res) => {
   try {
-    let course = await Course.findOne({ id: req.params.id });
-    if (!course) {
-      course = await Course.findById(req.params.id);
-    }
-
-    if (!course) {
-      return res.status(404).json({
-        success: false,
-        message: "Course not found",
-      });
-    }
-
-    const remaining = course.videos.filter((v) => v.id !== req.params.videoId);
-    if (remaining.length === course.videos.length) {
-      return res.status(404).json({ success: false, message: "Lesson not found" });
-    }
-    if (["live", "private"].includes(Course.statusOf(course)) && !remaining.some((v) => v.videoId && !v.upcoming)) {
-      return res.status(400).json({ success: false, message: "Make the course unlive or upcoming before removing its last lesson." });
-    }
-    const removedVideoIds = videoIdsOf(course.videos.filter((v) => v.id === req.params.videoId));
-    course.videos = course.videos.filter((v) => v.id !== req.params.videoId);
-    course.lessons = course.videos.length;
-    await course.save();
-    await deleteUnusedVideos(removedVideoIds);
-
-    res.status(200).json({
-      success: true,
-      message: "Video removed",
-      data: course,
+    let removed;
+    const { course } = await editCourse(req.params.id, (doc) => {
+      removed = doc.videos.find((v) => v.id === req.params.videoId);
+      if (!removed) throw new CourseEditError(404, "Lesson not found");
+      doc.videos = doc.videos.filter((v) => v.id !== req.params.videoId);
+      doc.lessons = doc.videos.length;
+      assertPlayableIfSold(doc, "Make the course unlive or upcoming before removing its last lesson.");
     });
+    await deleteUnusedVideos(videoIdsOf([removed]));
+    await recordAudit(req, course, "lesson_deleted", "lesson", removed);
+    return res.status(200).json({ success: true, message: "Video removed", data: course });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendEditError(res, error, "Remove lesson failed", "Unable to remove the lesson");
   }
 };
 

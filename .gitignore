@@ -15,3 +15,19 @@ skybird-api/test/
 coverage/
 test-results/
 playwright-report/
+
+# Local tool settings and logs
+.claude/
+*.log
+
+# Internal reports (not part of the site)
+Skybirds-*.pdf
+
+# Unused assets, kept locally only
+skybird-user-frontend/public/assets/Mod_1_Part_1_Enhanced.mp4
+skybird-user-frontend/public/assets/image1.jpg
+skybird-user-frontend/public/assets/image1.webp
+skybird-user-frontend/public/assets/img1.png
+skybird-user-frontend/public/assets/img2.jpeg
+skybird-user-frontend/public/assets/logo1.png
+skybird-user-frontend/public/assets/owner.jpeg

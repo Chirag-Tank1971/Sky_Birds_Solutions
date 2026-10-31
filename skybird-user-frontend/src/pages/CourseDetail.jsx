@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Lock, PlayCircle } from "lucide-react";
+import { ChevronDown, Lock, PlayCircle } from "lucide-react";
 import PaymentModal from "../components/PaymentModal";
 import { formatPrice } from "../data/courses";
+import { groupLessons, moduleSummary } from "../data/courseModules";
 import { fetchCourseById } from "../api/courses";
 import { useUser } from "../context/UserContext";
 import RollText from "../components/RollText";
@@ -69,6 +70,41 @@ export default function CourseDetail() {
   }
 
   const owned = hasCourse(course.id);
+  const groups = groupLessons(course);
+  const summary = moduleSummary(course);
+  const orderedLessons = groups.flatMap((group) => group.lessons);
+
+  const lessonCard = (video) => (
+    <div
+      key={video.id}
+      className={`relative overflow-hidden rounded-xl border p-4 ${
+        video.upcoming ? "border-dashed border-forest/20 bg-[#f4f6f2]" : "border-forest/10 bg-white"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-forest">Lesson {orderedLessons.indexOf(video) + 1}</p>
+        {video.upcoming ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+            <Lock size={11} /> Upcoming
+          </span>
+        ) : null}
+      </div>
+      <p className={`mt-1 font-semibold ${video.upcoming ? "text-ink/60" : ""}`}>{video.title}</p>
+      <p className="mt-2 text-xs text-ink/50">{video.duration}</p>
+      {video.upcoming ? (
+        <p className="mt-3 text-xs font-medium text-ink/45">Unlocks soon</p>
+      ) : owned ? (
+        <Link
+          to={`/watch/${course.id}?v=${video.id}`}
+          className="mt-3 inline-block text-sm font-semibold text-leaf hover:text-forest"
+        >
+          <PlayCircle size={15} className="mr-1 inline -mt-0.5" />Play →
+        </Link>
+      ) : (
+        <p className="mt-3 text-xs text-ink/40">Unlock to watch</p>
+      )}
+    </div>
+  );
 
   const handleBuy = () => {
     if (!isAuthenticated) {
@@ -128,6 +164,7 @@ export default function CourseDetail() {
                 ? ` + ${course.videos.filter((video) => video.upcoming).length} upcoming`
                 : ""}
             </li>
+            {summary ? <li>{summary}</li> : null}
             <li>{course.level || "Beginner"} level</li>
             <li>Stream only after payment</li>
           </ul>
@@ -162,40 +199,35 @@ export default function CourseDetail() {
 
       {course.videos?.length > 0 ? (
         <section className="mt-14">
-          <h2 className="text-2xl font-bold">Lessons</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {course.videos.map((video, index) => (
-              <div
-                key={video.id || index}
-                className={`relative overflow-hidden rounded-xl border p-4 ${
-                  video.upcoming ? "border-dashed border-forest/20 bg-[#f4f6f2]" : "border-forest/10 bg-white"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-forest">Lesson {index + 1}</p>
-                  {video.upcoming ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                      <Lock size={11} /> Upcoming
-                    </span>
-                  ) : null}
-                </div>
-                <p className={`mt-1 font-semibold ${video.upcoming ? "text-ink/60" : ""}`}>{video.title}</p>
-                <p className="mt-2 text-xs text-ink/50">{video.duration}</p>
-                {video.upcoming ? (
-                  <p className="mt-3 text-xs font-medium text-ink/45">Unlocks soon</p>
-                ) : owned ? (
-                  <Link
-                    to={`/watch/${course.id}?v=${video.id}`}
-                    className="mt-3 inline-block text-sm font-semibold text-leaf hover:text-forest"
-                  >
-                    <PlayCircle size={15} className="mr-1 inline -mt-0.5" />Play →
-                  </Link>
-                ) : (
-                  <p className="mt-3 text-xs text-ink/40">Unlock to watch</p>
-                )}
-              </div>
-            ))}
-          </div>
+          <h2 className="text-2xl font-bold">{summary ? "Course modules" : "Lessons"}</h2>
+          {summary ? (
+            <div className="mt-4 space-y-3">
+              {groups.map((group, index) => (
+                <details key={group.id || "content"} open={index === 0} className="group/module overflow-hidden rounded-2xl border border-forest/10 bg-white">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-ink">{group.title}</h3>
+                      {group.description ? <p className="mt-0.5 text-sm text-ink/60">{group.description}</p> : null}
+                      <p className="mt-1 text-xs text-ink/50">{group.lessons.length} {group.lessons.length === 1 ? "lesson" : "lessons"}</p>
+                    </div>
+                    {group.upcoming ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                        <Lock size={11} /> Coming soon
+                      </span>
+                    ) : null}
+                    <ChevronDown size={18} className="shrink-0 text-ink/50 transition-transform group-open/module:rotate-180" />
+                  </summary>
+                  <div className="grid gap-3 border-t border-forest/10 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {group.lessons.map(lessonCard)}
+                  </div>
+                </details>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {orderedLessons.map(lessonCard)}
+            </div>
+          )}
         </section>
       ) : null}
 

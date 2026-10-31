@@ -7,11 +7,13 @@ const Payment = require("../models/Payment");
 const User = require("../models/User");
 const { isConfigured: cloudinaryConfigured } = require("../config/cloudinary");
 const { videoDir, validateVideoId, listVideoJobs } = require("./videoService");
+const { isLessonLocked } = require("./courseContent");
 
 const ACTIVITY_DAYS = 30;
 const ACTIVITY_LIMIT = 50;
 const COUPON_EXPIRY_WARNING_DAYS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const VIDEO_STUCK_MS = 2 * 60 * 60 * 1000;
 
 const rupees = (amount) => `₹${Number(amount || 0).toLocaleString("en-IN")}`;
 // Customers sign up with a mobile number or an email.
@@ -20,9 +22,55 @@ const customerLabel = (name, mobile, email) => {
   return name ? `${name} (${contact})` : contact;
 };
 
+// Course building news, worked out from recorded video state, so each appears once and clears when resolved.
+async function courseVideoActivity(since) {
+  const courses = await Course.find({ "videos.provider": "bunny" }).select("id title modules videos").lean();
+  const items = [];
+  const now = Date.now();
+  for (const course of courses) {
+    const link = `/courses/edit/${course.id}`;
+    for (const item of course.modules || []) {
+      const lessons = (course.videos || []).filter((lesson) => lesson.moduleId === item.id);
+      if (item.upcoming && lessons.length && lessons.every((lesson) => lesson.readyAt && lesson.videoId)) {
+        items.push({
+          id: `module-ready:${course.id}:${item.id}`,
+          type: "video",
+          title: "Module ready to publish",
+          message: `${item.title} in ${course.title}: all ${lessons.length} lessons are ready`,
+          link,
+          createdAt: new Date(Math.max(...lessons.map((lesson) => new Date(lesson.readyAt).getTime()))),
+        });
+      }
+    }
+    for (const lesson of course.videos || []) {
+      if (lesson.videoFailedAt) {
+        items.push({
+          id: `video-failed:${course.id}:${lesson.id}:${lesson.videoId}`,
+          type: "video",
+          title: "Video failed",
+          message: `${lesson.title} in ${course.title} needs a new upload`,
+          link,
+          createdAt: lesson.videoFailedAt,
+        });
+      } else if (lesson.processingSince && !lesson.readyAt && now - new Date(lesson.processingSince).getTime() > VIDEO_STUCK_MS) {
+        items.push({
+          id: `video-stuck:${course.id}:${lesson.id}:${lesson.videoId}`,
+          type: "video",
+          title: "Video stuck",
+          message: `${lesson.title} in ${course.title} has been processing for over 2 hours. Upload it again if it doesn't finish.`,
+          link,
+          createdAt: new Date(new Date(lesson.processingSince).getTime() + VIDEO_STUCK_MS),
+        });
+      }
+    }
+  }
+  return items.filter((item) => new Date(item.createdAt) >= since);
+}
+
 // Things that happened recently: new queries, purchases and sign-ups.
 async function recentActivity(since) {
-  const [contacts, payments, users] = await Promise.all([
+  const [videoItems, contacts, payments, users] = await Promise.all([
+    courseVideoActivity(since),
     Contact.find({ createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).select("name subject status createdAt").lean(),
     Payment.find({ status: "paid", paidAt: { $gte: since } }).sort({ paidAt: -1 }).limit(ACTIVITY_LIMIT)
       .select("userMobile courseTitle finalAmount provider couponCode paidAt").lean(),
@@ -30,6 +78,7 @@ async function recentActivity(since) {
   ]);
 
   const items = [
+    ...videoItems,
     ...contacts.map((contact) => ({
       id: `contact:${contact._id}`,
       type: "query",
@@ -67,14 +116,14 @@ async function websiteAlerts(admin) {
   const now = Date.now();
 
   // Lesson videos: missing files (wiped disk) or no video attached.
-  const courses = await Course.find(Course.viewableFilter()).select("id title videos").lean();
+  const courses = await Course.find(Course.viewableFilter()).select("id title videos modules").lean();
   let missingFiles = 0;
   let noVideo = 0;
   const affected = new Set();
   const processing = new Set(listVideoJobs().filter((job) => job.status !== "failed").map((job) => job.videoId));
   for (const course of courses) {
     for (const lesson of course.videos || []) {
-      if (lesson.upcoming) continue;
+      if (isLessonLocked(course, lesson)) continue;
       if (!lesson.videoId) {
         noVideo += 1;
         affected.add(course.title);

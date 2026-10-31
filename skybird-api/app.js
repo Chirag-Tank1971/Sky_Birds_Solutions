@@ -4,6 +4,7 @@ const morgan = require("morgan");
 const path = require("path");
 const rateLimit = require("./middleware/rateLimit");
 const { razorpayWebhook } = require("./controllers/paymentController");
+const { bunnyWebhook } = require("./controllers/webhookController");
 
 const adminCouponRoutes = require("./routes/adminCouponRoutes");
 const couponRoutes = require("./routes/couponRoutes");
@@ -109,6 +110,14 @@ app.use(
   }),
 );
 app.use(
+  "/api/customer/password",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: "Too many password attempts. Please try again later.",
+  }),
+);
+app.use(
   "/api/auth/admin/login",
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -131,6 +140,13 @@ app.post(
   "/api/payment/razorpay/webhook",
   express.raw({ type: "*/*", limit: "1mb" }),
   razorpayWebhook,
+);
+
+// Bunny also signs the exact request bytes.
+app.post(
+  "/api/webhooks/bunny",
+  express.raw({ type: "*/*", limit: "1mb" }),
+  bunnyWebhook,
 );
 
 app.use(express.json({ limit: "1mb" }));

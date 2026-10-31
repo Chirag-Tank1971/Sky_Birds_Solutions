@@ -10,7 +10,11 @@ const About = lazy(() => import("./pages/About"));
 const Courses = lazy(() => import("./pages/Courses"));
 const CourseDetail = lazy(() => import("./pages/CourseDetail"));
 const Contact = lazy(() => import("./pages/Contact"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
+const DashboardLayout = lazy(() => import("./components/DashboardLayout"));
+const MyCourses = lazy(() => import("./pages/dashboard/MyCourses"));
+const Transactions = lazy(() => import("./pages/dashboard/Transactions"));
+const Settings = lazy(() => import("./pages/dashboard/Settings"));
+const ComingSoon = lazy(() => import("./pages/dashboard/ComingSoon"));
 const Watch = lazy(() => import("./pages/Watch"));
 const Login = lazy(() => import("./pages/Login"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
@@ -52,14 +56,6 @@ export default function App() {
             <Route path="/privacy-policy" element={<LazyPage component={PrivacyPolicy} />} />
             <Route path="/terms" element={<LazyPage component={Terms} />} />
             <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <LazyPage component={Dashboard} />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/watch/:courseId"
               element={
                 <ProtectedRoute>
@@ -68,6 +64,26 @@ export default function App() {
               }
             />
             <Route path="*" element={<LazyPage component={NotFound} />} />
+          </Route>
+          {/* The learner dashboard has its own sidebar, so it sits outside the site Layout. */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Suspense fallback={<TopLoader />}>
+                  <DashboardLayout />
+                </Suspense>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<LazyPage component={MyCourses} />} />
+            <Route path="explore" element={<LazyPage component={Courses} />} />
+            <Route path="sessions" element={<LazyPage component={ComingSoon} />} />
+            <Route path="communities" element={<LazyPage component={ComingSoon} />} />
+            <Route path="assessments" element={<LazyPage component={ComingSoon} />} />
+            <Route path="transactions" element={<LazyPage component={Transactions} />} />
+            <Route path="rewards" element={<LazyPage component={ComingSoon} />} />
+            <Route path="settings" element={<LazyPage component={Settings} />} />
           </Route>
         </Routes>
       </BrowserRouter>

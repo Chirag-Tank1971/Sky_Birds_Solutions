@@ -1,5 +1,7 @@
 const User = require("../models/User");
+const Payment = require("../models/Payment");
 const { parseProfile } = require("../services/profile");
+const { publicVideos, publicModules } = require("../services/courseContent");
 // Registers the Course model used by populate() below.
 require("../models/Course");
 
@@ -12,13 +14,30 @@ exports.getPurchasedCourses = async (req, res) => {
     const purchased = user.purchasedCourses.filter((item) => item.course).map((item) => {
       const course = item.course.toObject();
       course.videoUrl = "";
-      course.videos = (course.videos || []).map((video) => ({ id: video.id, title: video.title, duration: video.duration || "", videoId: video.videoId || "" }));
+      const videos = publicVideos(course);
+      course.modules = publicModules(course);
+      course.videos = videos;
       return { ...course, purchasedAt: item.purchasedAt };
     });
     return res.status(200).json({ success: true, count: purchased.length, data: purchased });
   } catch (error) {
     console.error("Get purchased courses failed:", error.message);
     return res.status(500).json({ success: false, message: "Unable to load purchased courses" });
+  }
+};
+
+// @desc    Get the logged-in customer's completed payments, newest first
+// @route   GET /api/customer/transactions
+exports.getTransactions = async (req, res) => {
+  try {
+    const data = await Payment.find({ user: req.user._id, status: "paid" })
+      .select("orderId paymentId provider courseTitle amount currency couponCode discountAmount paidAt")
+      .sort({ paidAt: -1 })
+      .lean();
+    return res.status(200).json({ success: true, count: data.length, data });
+  } catch (error) {
+    console.error("Get transactions failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to load transactions" });
   }
 };
 

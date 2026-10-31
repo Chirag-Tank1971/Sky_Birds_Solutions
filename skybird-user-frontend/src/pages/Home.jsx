@@ -532,23 +532,9 @@ export default function Home() {
           variants={fadeUp}
           className="mx-auto mb-12 max-w-5xl text-center"
         >
-          {(() => {
-            // The thumbnail pill sits after the first word of the (editable) section title.
-            const [firstWord, ...restWords] = (home.featured?.title || "Latest Courses").split(" ");
-            return (
-              <h2 className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-4xl font-extrabold tracking-tight text-ink sm:text-6xl">
-                <span>{firstWord}</span>
-                <span className="inline-flex h-12 w-24 items-center justify-center overflow-hidden rounded-full bg-[#10251D] shadow-lg ring-4 ring-leaf/20 sm:h-16 sm:w-32">
-                  {featured[0]?.thumbnail ? (
-                    <img src={featured[0].thumbnail} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <img src="/assets/logo1.webp" alt="" className="h-4/5 object-contain" />
-                  )}
-                </span>
-                {restWords.length ? <span>{restWords.join(" ")}</span> : null}
-              </h2>
-            );
-          })()}
+          <h2 className="text-4xl font-extrabold tracking-tight text-ink sm:text-6xl">
+            {home.featured?.title || "Latest Courses"}
+          </h2>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-600">
             {home.featured?.description || "Practical training to help you understand online selling and marketplace operations."}
           </p>

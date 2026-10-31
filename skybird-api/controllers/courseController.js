@@ -1,9 +1,11 @@
 const jwt = require("jsonwebtoken");
 const Course = require("../models/Course");
 const bunnyStream = require("../services/bunnyStream");
+const { isLessonLocked, publicVideos, publicModules } = require("../services/courseContent");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
 const { createPlaybackToken } = require("../services/playbackService");
+const { getVideoStatus } = require("../services/videoService");
 const { issuedBeforePasswordChange } = require("../middleware/auth");
 
 const verifyAuthUser = async (req) => {
@@ -52,16 +54,8 @@ exports.getAllCourses = async (req, res) => {
       ...course,
       status: Course.statusOf(course),
       videoUrl: "",
-      videos: (course.videos || []).map((video) => ({
-        id: video.id,
-        title: video.title,
-        duration: video.duration || "",
-        videoId: video.upcoming ? "" : video.videoId || "",
-
-        upcoming: Boolean(video.upcoming),
-
-        provider: video.provider || "local",
-      })),
+      videos: publicVideos(course),
+      modules: publicModules(course),
     }));
 
     res.status(200).json({
@@ -91,16 +85,9 @@ exports.getCourseById = async (req, res) => {
     // Never expose legacy link/videoUrl values to customer-facing clients.
     course.videoUrl = "";
     course.status = Course.statusOf(course);
-    course.videos = (course.videos || []).map((video) => ({
-      id: video.id,
-      title: video.title,
-      duration: video.duration || "",
-      videoId: video.upcoming ? "" : video.videoId || "",
-
-      upcoming: Boolean(video.upcoming),
-
-      provider: video.provider || "local",
-    }));
+    const videos = publicVideos(course);
+    course.modules = publicModules(course);
+    course.videos = videos;
 
     res.status(200).json({ success: true, data: course });
   } catch (error) {
@@ -127,7 +114,7 @@ exports.createPlaybackAuthorization = async (req, res) => {
     }
 
     const lesson = (course.videos || []).find((v) => v.id === videoId);
-    if (lesson?.upcoming) return res.status(403).json({ success: false, message: "This lesson is coming soon." });
+    if (lesson && isLessonLocked(course, lesson)) return res.status(403).json({ success: false, message: "This lesson is coming soon." });
     const secureVideoId = lesson?.videoId || (course.videos?.length === 0 ? "" : null);
     if (!secureVideoId) return res.status(404).json({ success: false, message: "Video not found for this course" });
 
@@ -136,6 +123,11 @@ exports.createPlaybackAuthorization = async (req, res) => {
       if (!bunnyStream.isConfigured()) return res.status(503).json({ success: false, message: "Video service is not available" });
       res.set("Cache-Control", "private, no-store");
       return res.status(200).json({ success: true, provider: "bunny", ...bunnyStream.embedUrl(secureVideoId) });
+    }
+
+    if (getVideoStatus(secureVideoId).status !== "ready") {
+      console.error(`Lesson video ${secureVideoId} of course ${course._id} is not ready on this server`);
+      return res.status(404).json({ success: false, message: "Video not found for this course" });
     }
 
     const token = createPlaybackToken({

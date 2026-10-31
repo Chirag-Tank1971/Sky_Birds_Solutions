@@ -525,6 +525,28 @@ exports.setPassword = async (req, res) => {
   }
 };
 
+// Changes the password of the signed-in customer. Other devices are signed out; this one gets a new token.
+exports.changePassword = async (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || "");
+    const newPassword = req.body?.newPassword;
+    if (!currentPassword || currentPassword.length > 128 || !validPassword(newPassword)) {
+      return res.status(400).json({ success: false, message: "Enter your current password and a new password of at least 8 characters." });
+    }
+    const bcrypt = require("bcryptjs");
+    const user = await User.findById(req.user._id).select("+passwordHash");
+    if (!user?.passwordHash || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      return res.status(400).json({ success: false, message: "Your current password is incorrect." });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await User.updateOne({ _id: user._id }, { $set: { passwordHash, passwordChangedAt: new Date() }, $unset: { passwordResetJti: 1 } });
+    return res.status(200).json({ success: true, message: "Password changed", token: generateToken(user._id, "customer") });
+  } catch (error) {
+    console.error("Change password failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to change your password right now" });
+  }
+};
+
 exports.resetPassword = async (req, res) => {
   try {
     const id = parseIdentifier(req.body);

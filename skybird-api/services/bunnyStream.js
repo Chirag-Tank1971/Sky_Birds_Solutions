@@ -44,17 +44,20 @@ async function bunnyRequest(path, { method = "GET", body } = {}) {
 
 // Creates the video entry and returns what the admin browser needs for a resumable TUS upload.
 async function createUpload(title) {
-  const lib = coursesLibrary();
   const video = await bunnyRequest("/videos", { method: "POST", body: { title: String(title || "Lesson").slice(0, 200) } });
   if (!video.guid) throw Object.assign(new Error("Video service did not return a video id"), { statusCode: 502 });
+  return { videoId: video.guid, ...signUpload(video.guid) };
+}
+
+// Bunny's TUS signature: sha256(library_id + api_key + expiration_time + video_id).
+function signUpload(videoId) {
+  const lib = coursesLibrary();
   const expire = Math.floor(Date.now() / 1000) + UPLOAD_LINK_SECONDS;
   return {
-    videoId: video.guid,
     libraryId: lib.libraryId,
     endpoint: TUS_ENDPOINT,
     expire,
-    // Bunny's TUS signature: sha256(library_id + api_key + expiration_time + video_id).
-    signature: sha256(`${lib.libraryId}${lib.apiKey}${expire}${video.guid}`),
+    signature: sha256(`${lib.libraryId}${lib.apiKey}${expire}${videoId}`),
   };
 }
 
@@ -89,4 +92,4 @@ function embedUrl(videoId) {
   return { embedUrl: url.toString(), expiresIn: EMBED_LINK_SECONDS };
 }
 
-module.exports = { isConfigured, createUpload, getStatus, deleteVideo, embedUrl };
+module.exports = { isConfigured, createUpload, signUpload, getStatus, deleteVideo, embedUrl };

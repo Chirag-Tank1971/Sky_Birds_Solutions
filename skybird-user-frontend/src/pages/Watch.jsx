@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import {
   Link,
   Navigate,
@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import ProtectedVideo from "../components/ProtectedVideo"
 import { fetchCourseById } from "../api/courses"
+import { groupLessons } from "../data/courseModules"
 import { useUser } from "../context/UserContext"
 
 export default function Watch() {
@@ -129,13 +130,16 @@ export default function Watch() {
   // Only safe lesson metadata is returned by the public course API.
   // The actual HLS URL is issued by the protected playback API.
   let selectedVideo = null
+  const groups = groupLessons(course)
+  const orderedLessons = groups.flatMap((group) => group.lessons)
+  const showModules = groups.some((group) => group.id)
 
-  if (course.videos?.length) {
-    // An unknown or missing lesson id opens the first lesson.
+  if (orderedLessons.length) {
+    // An unknown or missing lesson id opens the first playable lesson.
     selectedVideo =
-      (videoId && course.videos.find((v) => v.id === videoId)) ||
-      course.videos.find((v) => !v.upcoming) ||
-      course.videos[0]
+      (videoId && orderedLessons.find((v) => v.id === videoId)) ||
+      orderedLessons.find((v) => !v.upcoming) ||
+      orderedLessons[0]
   }
 
   const title = selectedVideo?.title || course.title
@@ -283,7 +287,20 @@ export default function Watch() {
 
             <div className="mt-5 overflow-hidden rounded-2xl border border-forest/10 bg-white shadow-sm">
               <div className="divide-y divide-gray-100">
-                {course.videos.map((v, i) => {
+                {groups.map((group) => (
+                <Fragment key={group.id || "content"}>
+                {showModules ? (
+                  <div className="flex items-center justify-between gap-3 bg-gray-50 px-4 py-3 sm:px-5">
+                    <h3 className="min-w-0 truncate text-sm font-bold text-ink">{group.title}</h3>
+                    {group.upcoming ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                        <Lock size={11} /> Coming soon
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {group.lessons.map((v) => {
+                  const i = orderedLessons.indexOf(v)
                   const isActive = selectedVideo?.id === v.id
 
                   if (v.upcoming) {
@@ -368,6 +385,8 @@ export default function Watch() {
                     </Link>
                   )
                 })}
+                </Fragment>
+                ))}
               </div>
             </div>
           </section>

@@ -29,6 +29,7 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
     let refreshTimer;
     let refreshing = null;
     let failedRefreshes = 0;
+    let nativeReloads = 0;
     // The latest playback token. hls.js sends it in the Authorization header,
     // which the API reads before the token in the URL.
     let currentToken = "";
@@ -121,8 +122,20 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
       video.src = streamUrlFor(auth);
     }
 
+    // A fresh token can't fix a stream that is broken for another reason, so stop
+    // after a few reloads in a row that never reached the video's metadata.
+    const onNativeLoaded = () => {
+      nativeReloads = 0;
+    };
     const onNativeError = () => {
       if (!active || failedRefreshes >= MAX_REFRESH_ATTEMPTS) return;
+      if (nativeReloads >= MAX_REFRESH_ATTEMPTS) {
+        clearTimeout(refreshTimer);
+        video.removeEventListener("error", onNativeError);
+        setStreamError("Unable to play the secure video stream.");
+        return;
+      }
+      nativeReloads += 1;
       reloadNative().catch(() => {});
     };
 
@@ -149,8 +162,10 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
         if (!video) throw new Error("Video player is unavailable");
         const streamUrl = streamUrlFor(auth);
 
-        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // hls.js first: recent Chrome also reports native HLS, but its token and error handling live here.
+        if (!Hls.isSupported() && video.canPlayType("application/vnd.apple.mpegurl")) {
           video.addEventListener("error", onNativeError);
+          video.addEventListener("loadedmetadata", onNativeLoaded);
           video.src = streamUrl;
         } else if (Hls.isSupported()) {
           hls = new Hls({
@@ -199,6 +214,7 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
       hlsRef.current = null;
       if (video) {
         video.removeEventListener("error", onNativeError);
+        video.removeEventListener("loadedmetadata", onNativeLoaded);
         video.pause();
         video.removeAttribute("src");
         video.load();

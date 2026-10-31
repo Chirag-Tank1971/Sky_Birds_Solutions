@@ -21,9 +21,13 @@ import {
   Clock,
   Lock,
   EyeOff,
+  AlertTriangle,
 } from "lucide-react";
 import Hls from "hls.js";
-import * as tus from "tus-js-client";
+import { uploadToBunny } from "../api/bunnyUpload";
+import CourseModules, { ConfirmModal, isLocked } from "../components/CourseModules";
+
+const STATUS_BATCH = 50;
 
 const VideoPreviewModal = ({ preview, onClose }) => {
   const videoRef = useRef(null);
@@ -105,6 +109,61 @@ const VideoPreviewModal = ({ preview, onClose }) => {
   );
 };
 
+const DeleteLessonModal = ({ lesson, busy, onCancel, onConfirm }) => {
+  if (!lesson) return null;
+  const close = () => {
+    if (!busy) onCancel();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="delete-lesson-title"
+      aria-describedby="delete-lesson-text"
+      onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}
+      onKeyDown={(event) => { if (event.key === "Escape") close(); }}
+    >
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start gap-4">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-red-50 text-red-600">
+            <AlertTriangle className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 id="delete-lesson-title" className="text-lg font-semibold text-gray-900">Delete this lesson?</h2>
+            <p className="mt-1 break-words text-sm font-medium text-gray-700">{lesson.title}</p>
+            <p id="delete-lesson-text" className="mt-2 text-sm text-gray-500">
+              The lesson and its video will be permanently removed from this course, including for learners who bought it. This can't be undone.
+            </p>
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          {/* Cancel takes focus so pressing Enter can't delete by accident. */}
+          <button
+            type="button"
+            autoFocus
+            onClick={close}
+            disabled={busy}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {busy ? "Deleting…" : "Delete lesson"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const VideoStatusLabel = ({ status, progress }) => {
   if (status === "processing") {
     return (
@@ -113,6 +172,30 @@ const VideoStatusLabel = ({ status, progress }) => {
         <span className="text-xs font-medium">
           Processing video{progress ? ` ${progress}%` : ""}… you can keep editing and save
         </span>
+      </div>
+    );
+  }
+  if (status === "uploading") {
+    return (
+      <div className="flex items-center gap-1 mt-1 text-primary-700">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <span className="text-xs font-medium">Uploading…</span>
+      </div>
+    );
+  }
+  if (status === "not_uploaded") {
+    return (
+      <div className="flex items-center gap-1 mt-1 text-amber-700">
+        <AlertTriangle className="w-3.5 h-3.5" />
+        <span className="text-xs font-medium">Upload incomplete. Choose Resume and pick the same file.</span>
+      </div>
+    );
+  }
+  if (status === "missing") {
+    return (
+      <div className="flex items-center gap-1 mt-1 text-red-600">
+        <X className="w-3.5 h-3.5" />
+        <span className="text-xs font-medium">Video file not found on this server. Replace this video.</span>
       </div>
     );
   }
@@ -143,6 +226,7 @@ const EMPTY_FORM = {
   thumbnail: "",
   description: "",
   videos: [],
+  modules: [],
   status: "unlive",
 };
 
@@ -161,10 +245,11 @@ const mapVideos = (videos) =>
     videoId: video.videoId,
     provider: video.provider || "local",
     upcoming: Boolean(video.upcoming),
+    moduleId: video.moduleId || "",
   }));
 
-// Course details only: lessons and status are saved on the server as soon as they change.
-const detailsOf = ({ videos, status, ...details }) => details;
+// Course details only: lessons, modules and status are saved on the server as soon as they change.
+const detailsOf = ({ videos, modules, status, ...details }) => details;
 
 const readDraft = (key) => {
   try {
@@ -210,14 +295,21 @@ const CourseForm = () => {
     duration: "",
     videoId: "",
     provider: "",
-    upcoming: false,
+    moduleId: "",
   });
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [confirm, setConfirm] = useState(null);
+  const [resumeTarget, setResumeTarget] = useState(null);
+  const resumeInputRef = useRef(null);
+  // Finished uploading in this session: only these announce their result, and Bunny may not list them as received yet.
+  const uploadedIdsRef = useRef(new Set());
   // Videos uploaded to Bunny Stream in this session (their status is checked with Bunny).
   const [bunnyIds, setBunnyIds] = useState({});
 
   // Processing state of videos uploaded in this session: videoId -> "processing" | "ready" | "failed".
   // Videos already saved on the course have no entry and are treated as ready.
   const [videoStatus, setVideoStatus] = useState({});
+  const [lessonToDelete, setLessonToDelete] = useState(null);
   // Encoding progress (0-100) reported by Bunny, and a tick that keeps polling while anything is processing.
   const [videoProgress, setVideoProgress] = useState({});
   const [pollTick, setPollTick] = useState(0);
@@ -226,29 +318,45 @@ const CourseForm = () => {
     const pending = Object.keys(videoStatus).filter((videoId) => videoStatus[videoId] === "processing");
     if (pending.length === 0) return undefined;
     const timer = setTimeout(async () => {
+      // Skip while the tab is hidden; the next tick checks again.
+      if (document.hidden) {
+        setPollTick((tick) => tick + 1);
+        return;
+      }
       const updates = {};
       const progress = {};
-      for (const videoId of pending) {
+      const bunnyPending = pending.filter((videoId) => bunnyIds[videoId]);
+      for (let start = 0; start < bunnyPending.length; start += STATUS_BATCH) {
         try {
-          const statusUrl = bunnyIds[videoId] ? `/admin/videos/bunny/${videoId}/status` : `/admin/videos/${videoId}/status`;
-          const { data } = await API.get(statusUrl);
+          const { data } = await API.post("/admin/videos/bunny/status", { ids: bunnyPending.slice(start, start + STATUS_BATCH) });
+          Object.entries(data.data).forEach(([videoId, video]) => {
+            if (video.progress) progress[videoId] = video.progress;
+            if (video.status !== "processing") updates[videoId] = video.status;
+            else if (video.rawStatus === 0 && !uploadedIdsRef.current.has(videoId)) updates[videoId] = "not_uploaded";
+          });
+        } catch {
+          // Keep polling; a temporary network error should not mark the videos failed.
+        }
+      }
+      for (const videoId of pending.filter((id) => !bunnyIds[id])) {
+        try {
+          const { data } = await API.get(`/admin/videos/${videoId}/status`);
           if (data.progress) progress[videoId] = data.progress;
-          if (data.status === "ready") {
-            updates[videoId] = "ready";
-            toast.success("A lesson video finished processing");
-          } else if (data.status === "failed" || data.status === "missing") {
-            updates[videoId] = "failed";
-            toast.error(data.error || "A lesson video failed to process. Please upload it again.");
-          }
+          if (data.status === "ready") updates[videoId] = "ready";
+          else if (data.status === "failed" || data.status === "missing") updates[videoId] = "failed";
         } catch {
           // Keep polling; a temporary network error should not mark the video failed.
         }
       }
+      const announced = Object.entries(updates).filter(([videoId]) => uploadedIdsRef.current.has(videoId));
+      const finished = announced.filter(([, status]) => status === "ready").length;
+      if (finished) toast.success(finished === 1 ? "A lesson video finished processing" : `${finished} lesson videos finished processing`);
+      if (announced.length > finished) toast.error("A lesson video failed to process. Please upload it again.");
       if (Object.keys(progress).length) setVideoProgress((prev) => ({ ...prev, ...progress }));
       if (Object.keys(updates).length) setVideoStatus((prev) => ({ ...prev, ...updates }));
       // Schedule the next check even when nothing changed yet.
       setPollTick((tick) => tick + 1);
-    }, pollTick === 0 ? 500 : 4000);
+    }, pollTick === 0 ? 500 : 10000);
     return () => clearTimeout(timer);
   }, [videoStatus, bunnyIds, pollTick]);
 
@@ -256,6 +364,7 @@ const CourseForm = () => {
   const trackUpload = (data) => {
     const status = data.status === "processing" ? "processing" : "ready";
     if (data.provider === "bunny") setBunnyIds((prev) => ({ ...prev, [data.videoId]: true }));
+    uploadedIdsRef.current.add(data.videoId);
     setVideoStatus((prev) => ({ ...prev, [data.videoId]: status }));
     return status;
   };
@@ -275,7 +384,7 @@ const CourseForm = () => {
   }, [form, newVideo, baseline, dirty, draftKey]);
 
   useEffect(() => {
-    if (!dirty && !uploadingLessonVideo) return undefined;
+    if (!dirty && !uploadingLessonVideo && !bulkUploading) return undefined;
     const warn = (event) => {
       if (leavingRef.current) return;
       event.preventDefault();
@@ -283,7 +392,7 @@ const CourseForm = () => {
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty, uploadingLessonVideo]);
+  }, [dirty, uploadingLessonVideo, bulkUploading]);
 
   const discardDraft = () => {
     try {
@@ -320,6 +429,7 @@ const CourseForm = () => {
               thumbnail: c.thumbnail || "",
               description: c.description || "",
               videos: mapVideos(c.videos),
+              modules: c.modules || [],
               status: c.status || "live",
             };
             setForm(loadedForm);
@@ -327,6 +437,19 @@ const CourseForm = () => {
             const bunny = loadedForm.videos.filter((video) => video.provider === "bunny" && video.videoId);
             setBunnyIds(Object.fromEntries(bunny.map((video) => [video.videoId, true])));
             setVideoStatus(Object.fromEntries(bunny.map((video) => [video.videoId, "processing"])));
+            // Local lessons live on this server's disk, so confirm each file is really there.
+            loadedForm.videos
+              .filter((video) => video.provider !== "bunny" && video.videoId)
+              .forEach(async ({ videoId }) => {
+                try {
+                  const { data } = await API.get(`/admin/videos/${videoId}/status`);
+                  if (data.status !== "ready") {
+                    setVideoStatus((prev) => ({ ...prev, [videoId]: data.status === "queued" ? "processing" : data.status }));
+                  }
+                } catch {
+                  // Couldn't check; leave the lesson as it is rather than flag it wrongly.
+                }
+              });
           }
         }
 
@@ -399,48 +522,34 @@ const CourseForm = () => {
       return { ...data, provider: "local" };
     }
 
-    await new Promise((resolve, reject) => {
-      let settled = false;
-      let confirmTimer;
-      const finish = (fn, value) => {
-        if (settled) return;
-        settled = true;
-        clearInterval(confirmTimer);
-        fn(value);
-      };
-      // Bunny's final upload reply can be slow or unreadable even though it already has every byte.
-      // Once all bytes are sent, ask the API whether Bunny has the video, and move on as soon as it does;
-      // the status polling then reports processing / ready / failed.
-      const confirmWithBunny = () => {
-        if (confirmTimer) return;
-        confirmTimer = setInterval(async () => {
-          try {
-            const { data } = await API.get(`/admin/videos/bunny/${signed.videoId}/status`);
-            if (data.success && data.rawStatus >= 1) finish(resolve);
-          } catch {
-            // Keep waiting; tus may still report success or an error itself.
-          }
-        }, 3000);
-      };
-      new tus.Upload(file, {
-        endpoint: signed.endpoint,
-        retryDelays: [0, 3000, 5000, 10000, 20000, 60000],
-        headers: {
-          AuthorizationSignature: signed.signature,
-          AuthorizationExpire: String(signed.expire),
-          VideoId: signed.videoId,
-          LibraryId: String(signed.libraryId),
-        },
-        metadata: { filetype: file.type, title },
-        onProgress: (sent, total) => {
-          setUploadPercent(Math.round((sent / total) * 100));
-          if (sent === total) confirmWithBunny();
-        },
-        onSuccess: () => finish(resolve),
-        onError: (err) => finish(reject, err),
-      }).start();
-    });
+    await uploadToBunny(file, signed, title, setUploadPercent).promise;
     return { success: true, videoId: signed.videoId, provider: "bunny", status: "processing" };
+  };
+
+  // Continue an interrupted upload. The same file carries on where it stopped; a different one starts over.
+  const handleResumeUpload = async (e) => {
+    const file = e.target.files?.[0];
+    const lesson = resumeTarget;
+    e.target.value = "";
+    setResumeTarget(null);
+    if (!file || !lesson) return;
+    setUploadingLessonVideo(true);
+    setUploadPercent(0);
+    try {
+      const { data: signed } = await API.post(`/admin/videos/bunny/${lesson.videoId}/upload-signature`);
+      setVideoStatus((prev) => ({ ...prev, [lesson.videoId]: "uploading" }));
+      await uploadToBunny(file, signed, lesson.title, setUploadPercent).promise;
+      toast.success("Upload finished. Processing in the background…");
+      trackUpload({ videoId: lesson.videoId, provider: "bunny", status: "processing" });
+    } catch (err) {
+      if (err.response?.status === 409) trackUpload({ videoId: lesson.videoId, provider: "bunny", status: "processing" });
+      else {
+        setVideoStatus((prev) => ({ ...prev, [lesson.videoId]: "not_uploaded" }));
+        lessonError(err, "Upload failed. Try again.");
+      }
+    } finally {
+      setUploadingLessonVideo(false);
+    }
   };
 
   // Individual Lesson Video Upload Handler
@@ -470,7 +579,7 @@ const CourseForm = () => {
             provider: data.provider,
           });
           applyCourse(saved.data);
-          toast.success("Lesson video replaced.");
+          toast.success(saved.message || "Lesson video replaced.");
           setReplaceTargetId(null);
         } else {
           setNewVideo((prev) => ({
@@ -500,7 +609,7 @@ const CourseForm = () => {
 
   // Take the server's copy of lessons and status after every change.
   const applyCourse = (course) => {
-    if (course) setForm((prev) => ({ ...prev, videos: mapVideos(course.videos), status: course.status || prev.status }));
+    if (course) setForm((prev) => ({ ...prev, videos: mapVideos(course.videos), modules: course.modules || [], status: course.status || prev.status }));
   };
 
   const lessonError = (err, fallback) => toast.error(err.response?.data?.message || fallback);
@@ -528,9 +637,15 @@ const CourseForm = () => {
   };
 
   const moveVideo = async (videoId, direction) => {
-    const index = form.videos.findIndex((video) => video.id === videoId);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= form.videos.length || lessonBusy) return;
+    if (lessonBusy) return;
+    // Swap with its neighbour in the same group; lessons keep one overall order.
+    const groupOf = (video) => (form.modules.some((item) => item.id === video.moduleId) ? video.moduleId : "");
+    const current = form.videos.find((video) => video.id === videoId);
+    const group = form.videos.filter((video) => groupOf(video) === groupOf(current));
+    const neighbour = group[group.indexOf(current) + direction];
+    if (!neighbour) return;
+    const index = form.videos.indexOf(current);
+    const nextIndex = form.videos.indexOf(neighbour);
     const videos = [...form.videos];
     [videos[index], videos[nextIndex]] = [videos[nextIndex], videos[index]];
     const previous = form.videos;
@@ -568,17 +683,66 @@ const CourseForm = () => {
     }
   };
 
-  const toggleUpcoming = async (lesson) => {
+  const updateLesson = async (lesson, changes, success, fallback) => {
     setLessonBusy(true);
     try {
-      const { data } = await API.put(`/admin/courses/${id}/videos/${lesson.id}`, { upcoming: !lesson.upcoming });
+      const { data } = await API.put(`/admin/courses/${id}/videos/${lesson.id}`, changes);
       applyCourse(data.data);
-      toast.success(lesson.upcoming ? "Lesson published" : "Lesson marked as upcoming");
+      toast.success(success);
     } catch (err) {
-      lessonError(err, "Couldn't change the lesson");
+      lessonError(err, fallback);
     } finally {
       setLessonBusy(false);
+      setConfirm(null);
     }
+  };
+
+  const toggleUpcoming = (lesson) => {
+    if (lesson.upcoming) {
+      updateLesson(lesson, { upcoming: false }, "Lesson published", "Couldn't publish the lesson");
+      return;
+    }
+    setConfirm({
+      title: `Unpublish ${lesson.title}?`,
+      message: "It locks for everyone, including people who already bought the course, until you publish it again.",
+      label: "Unpublish lesson",
+      onConfirm: () => updateLesson(lesson, { upcoming: true }, "Lesson unpublished", "Couldn't change the lesson"),
+    });
+  };
+
+  const moveToModule = (lesson, moduleId) => {
+    const move = () => updateLesson(lesson, { moduleId }, "Lesson moved", "Couldn't move the lesson");
+    const target = form.modules.find((item) => item.id === moduleId);
+    if (!isLocked(form.modules, lesson) && target?.upcoming) {
+      setConfirm({
+        title: `Move ${lesson.title}?`,
+        message: `${target.title} isn't published, so this lesson will lock for everyone, including buyers, until you publish that module.`,
+        label: "Move lesson",
+        onConfirm: move,
+      });
+      return;
+    }
+    move();
+  };
+
+  const markBlockedLessons = (lessons) => {
+    const known = { processing: "processing", not_uploaded: "not_uploaded", failed: "failed", missing: "missing" };
+    const updates = {};
+    lessons.forEach((blocked) => {
+      const videoId = form.videos.find((video) => video.id === blocked.id)?.videoId;
+      if (videoId && known[blocked.state]) updates[videoId] = known[blocked.state];
+    });
+    setVideoStatus((prev) => ({ ...prev, ...updates }));
+  };
+
+  const markCreated = (videoIds) => {
+    setBunnyIds((prev) => ({ ...prev, ...Object.fromEntries(videoIds.map((videoId) => [videoId, true])) }));
+    setVideoStatus((prev) => ({ ...prev, ...Object.fromEntries(videoIds.map((videoId) => [videoId, "uploading"])) }));
+  };
+
+  const markUploaded = (videoId) => {
+    uploadedIdsRef.current.add(videoId);
+    setVideoStatus((prev) => ({ ...prev, [videoId]: "processing" }));
   };
 
   const changeStatus = async (status) => {
@@ -601,11 +765,6 @@ const CourseForm = () => {
       return;
     }
 
-    if (!newVideo.videoId && !newVideo.upcoming) {
-      toast.error("Upload the lesson video first, or mark it as upcoming");
-      return;
-    }
-
     setLessonBusy(true);
     try {
       const { data } = await API.post(`/admin/courses/${id}/videos`, {
@@ -613,10 +772,11 @@ const CourseForm = () => {
         duration: newVideo.duration || "",
         videoId: newVideo.videoId,
         provider: newVideo.provider || "local",
-        upcoming: Boolean(newVideo.upcoming),
+        moduleId: newVideo.moduleId || "",
+        upcoming: true,
       });
       applyCourse(data.data);
-      toast.success(newVideo.upcoming ? "Upcoming lesson added" : "Lesson added");
+      toast.success("Lesson added. It stays hidden until you publish it.");
     } catch (err) {
       lessonError(err, "Couldn't add the lesson");
       return;
@@ -624,17 +784,19 @@ const CourseForm = () => {
       setLessonBusy(false);
     }
 
-    setNewVideo({
+    setNewVideo((prev) => ({
       title: "",
       duration: "",
       videoId: "",
       provider: "",
-      upcoming: false,
-    });
+      moduleId: prev.moduleId,
+    }));
   };
 
-  const removeVideo = async (lesson) => {
-    if (!window.confirm(`Remove the lesson "${lesson.title}"? Its video will be deleted.`)) return;
+  const removeVideo = (lesson) => setLessonToDelete(lesson);
+
+  const confirmRemoveVideo = async () => {
+    const lesson = lessonToDelete;
     setLessonBusy(true);
     try {
       const { data } = await API.delete(`/admin/courses/${id}/videos/${lesson.id}`);
@@ -644,6 +806,7 @@ const CourseForm = () => {
       lessonError(err, "Couldn't remove the lesson");
     } finally {
       setLessonBusy(false);
+      setLessonToDelete(null);
     }
   };
 
@@ -691,6 +854,147 @@ const CourseForm = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const renderLesson = (v, idx, count) => {
+    const lessonModule = form.modules.find((item) => item.id === v.moduleId);
+    return (
+                <div
+                  key={v.id}
+                  className="flex flex-wrap items-center gap-3 p-3.5 bg-gray-50 rounded-xl border border-gray-200"
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xs font-bold text-gray-400 w-6 text-center">#{idx + 1}</span>
+                    <button type="button" onClick={() => moveVideo(v.id, -1)} disabled={idx === 0 || lessonBusy} aria-label={`Move ${v.title} up`} title="Move up" className="p-1 rounded text-gray-500 hover:bg-gray-200 disabled:opacity-25 disabled:cursor-not-allowed">
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={() => moveVideo(v.id, 1)} disabled={idx === count - 1 || lessonBusy} aria-label={`Move ${v.title} down`} title="Move down" className="p-1 rounded text-gray-500 hover:bg-gray-200 disabled:opacity-25 disabled:cursor-not-allowed">
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex-1 min-w-[12rem]">
+                    {editingLesson?.id === v.id ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          value={editingLesson.title}
+                          onChange={(e) => setEditingLesson({ ...editingLesson, title: e.target.value })}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveLessonEdit(); if (e.key === "Escape") setEditingLesson(null); }}
+                          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                          placeholder="Lesson title"
+                          autoFocus
+                        />
+                        <input
+                          value={editingLesson.duration}
+                          onChange={(e) => setEditingLesson({ ...editingLesson, duration: e.target.value })}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveLessonEdit(); if (e.key === "Escape") setEditingLesson(null); }}
+                          className="w-28 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                          placeholder="15m 30s"
+                        />
+                        <button type="button" onClick={saveLessonEdit} disabled={lessonBusy} className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700 disabled:opacity-50">Save</button>
+                        <button type="button" onClick={() => setEditingLesson(null)} className="rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200">Cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                          <span className="truncate">{v.title}</span>
+                          {(v.upcoming || lessonModule?.upcoming) && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                              <Lock className="h-3 w-3" /> Upcoming
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {v.duration || "Video Lesson"}
+                        </p>
+                      </>
+                    )}
+
+                    {v.videoId ? (
+                      <>
+                        <VideoStatusLabel status={statusOf(v.videoId)} progress={videoProgress[v.videoId]} />
+                        <p className="text-[11px] text-gray-400 font-mono mt-1 break-all">Video ID: {v.videoId}</p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-xs text-gray-500">No video yet. Upload one, then publish the lesson.</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {form.modules.length > 0 && (
+                      <select
+                        value={lessonModule ? v.moduleId : ""}
+                        onChange={(e) => moveToModule(v, e.target.value)}
+                        disabled={lessonBusy}
+                        aria-label={`Module for ${v.title}`}
+                        className="max-w-[9rem] rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs text-gray-700 outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Course content</option>
+                        {form.modules.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                      </select>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handlePreviewVideo(v)}
+                      disabled={!v.videoId || loadingPreviewId === v.id || statusOf(v.videoId) !== "ready"}
+                      title="Play this lesson video"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition disabled:opacity-50"
+                    >
+                      {loadingPreviewId === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                      Play
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingLesson({ id: v.id, title: v.title, duration: v.duration || "" })}
+                      title="Rename this lesson"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-100 rounded-lg transition"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    {statusOf(v.videoId) === "not_uploaded" && (
+                      <button
+                        type="button"
+                        onClick={() => { setResumeTarget(v); resumeInputRef.current?.click(); }}
+                        disabled={uploadingLessonVideo}
+                        title="Pick the same file to continue where it stopped"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition disabled:opacity-50"
+                      >
+                        <Upload className="w-3.5 h-3.5" /> Resume
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => { setReplaceTargetId(v.id); lessonVideoInputRef.current?.click(); }}
+                      disabled={uploadingLessonVideo}
+                      title="Replace this lesson's video"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition disabled:opacity-50"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> {v.videoId ? "Replace" : "Upload video"}
+                    </button>
+                    {/* A locked module publishes as a whole, from its card. */}
+                    {!lessonModule?.upcoming && (
+                    <button
+                      type="button"
+                      onClick={() => toggleUpcoming(v)}
+                      disabled={lessonBusy || (v.upcoming && (!v.videoId || statusOf(v.videoId) !== "ready"))}
+                      title={v.upcoming ? "Make this lesson available to learners" : "Show as upcoming (locked) to learners"}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium rounded-lg transition disabled:opacity-50 ${
+                        v.upcoming ? "text-green-700 bg-green-50 hover:bg-green-100" : "text-amber-700 bg-amber-50 hover:bg-amber-100"
+                      }`}
+                    >
+                      {v.upcoming ? <><Radio className="w-3.5 h-3.5" /> Publish</> : <><Lock className="w-3.5 h-3.5" /> Mark upcoming</>}
+                    </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeVideo(v)}
+                      disabled={lessonBusy}
+                      title="Remove lesson"
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+    );
   };
 
   if (loading) {
@@ -971,122 +1275,19 @@ const CourseForm = () => {
             </span>
           </div>
 
-          {/* Existing videos */}
-          {form.videos.length > 0 && (
-            <div className="space-y-3">
-              {form.videos.map((v, idx) => (
-                <div
-                  key={v.id}
-                  className="flex items-center gap-3 p-3.5 bg-gray-50 rounded-xl border border-gray-200"
-                >
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-xs font-bold text-gray-400 w-6 text-center">#{idx + 1}</span>
-                    <button type="button" onClick={() => moveVideo(v.id, -1)} disabled={idx === 0 || lessonBusy} aria-label={`Move ${v.title} up`} title="Move up" className="p-1 rounded text-gray-500 hover:bg-gray-200 disabled:opacity-25 disabled:cursor-not-allowed">
-                      <ChevronUp className="w-4 h-4" />
-                    </button>
-                    <button type="button" onClick={() => moveVideo(v.id, 1)} disabled={idx === form.videos.length - 1 || lessonBusy} aria-label={`Move ${v.title} down`} title="Move down" className="p-1 rounded text-gray-500 hover:bg-gray-200 disabled:opacity-25 disabled:cursor-not-allowed">
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {editingLesson?.id === v.id ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <input
-                          value={editingLesson.title}
-                          onChange={(e) => setEditingLesson({ ...editingLesson, title: e.target.value })}
-                          onKeyDown={(e) => { if (e.key === "Enter") saveLessonEdit(); if (e.key === "Escape") setEditingLesson(null); }}
-                          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
-                          placeholder="Lesson title"
-                          autoFocus
-                        />
-                        <input
-                          value={editingLesson.duration}
-                          onChange={(e) => setEditingLesson({ ...editingLesson, duration: e.target.value })}
-                          onKeyDown={(e) => { if (e.key === "Enter") saveLessonEdit(); if (e.key === "Escape") setEditingLesson(null); }}
-                          className="w-28 rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
-                          placeholder="15m 30s"
-                        />
-                        <button type="button" onClick={saveLessonEdit} disabled={lessonBusy} className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700 disabled:opacity-50">Save</button>
-                        <button type="button" onClick={() => setEditingLesson(null)} className="rounded-lg px-2 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200">Cancel</button>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                          <span className="truncate">{v.title}</span>
-                          {v.upcoming && (
-                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                              <Lock className="h-3 w-3" /> Upcoming
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {v.duration || "Video Lesson"}
-                        </p>
-                      </>
-                    )}
-
-                    {v.videoId ? (
-                      <>
-                        <VideoStatusLabel status={statusOf(v.videoId)} progress={videoProgress[v.videoId]} />
-                        <p className="text-[11px] text-gray-400 font-mono mt-1 break-all">Video ID: {v.videoId}</p>
-                      </>
-                    ) : (
-                      <p className="mt-1 text-xs text-gray-500">No video yet. Upload one, then publish the lesson.</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handlePreviewVideo(v)}
-                      disabled={!v.videoId || loadingPreviewId === v.id || statusOf(v.videoId) !== "ready"}
-                      title="Play this lesson video"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition disabled:opacity-50"
-                    >
-                      {loadingPreviewId === v.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                      Play
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingLesson({ id: v.id, title: v.title, duration: v.duration || "" })}
-                      title="Rename this lesson"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-100 rounded-lg transition"
-                    >
-                      <Pencil className="w-3.5 h-3.5" /> Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setReplaceTargetId(v.id); lessonVideoInputRef.current?.click(); }}
-                      disabled={uploadingLessonVideo}
-                      title="Replace this lesson's video"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition disabled:opacity-50"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" /> {v.videoId ? "Replace" : "Upload video"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleUpcoming(v)}
-                      disabled={lessonBusy || (v.upcoming && (!v.videoId || statusOf(v.videoId) !== "ready"))}
-                      title={v.upcoming ? "Make this lesson available to learners" : "Show as upcoming (locked) to learners"}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium rounded-lg transition disabled:opacity-50 ${
-                        v.upcoming ? "text-green-700 bg-green-50 hover:bg-green-100" : "text-amber-700 bg-amber-50 hover:bg-amber-100"
-                      }`}
-                    >
-                      {v.upcoming ? <><Radio className="w-3.5 h-3.5" /> Publish</> : <><Lock className="w-3.5 h-3.5" /> Mark upcoming</>}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeVideo(v)}
-                      disabled={lessonBusy}
-                      title="Remove lesson"
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <CourseModules
+            courseId={id}
+            modules={form.modules}
+            lessons={form.videos}
+            statusOf={statusOf}
+            renderLesson={renderLesson}
+            onCourse={applyCourse}
+            onCreated={markCreated}
+            onUploaded={markUploaded}
+            onBlocked={markBlockedLessons}
+            onBusyChange={setBulkUploading}
+            onPlay={handlePreviewVideo}
+          />
 
           {/* Add video form */}
           <div className="border border-dashed border-gray-300 rounded-xl p-5 space-y-4 bg-gray-50/50">
@@ -1096,7 +1297,7 @@ const CourseForm = () => {
               </p>
 
               <p className="text-xs text-gray-500 mt-1">
-                Enter a title, upload the video, then add the lesson. It's saved to the course immediately.
+                Enter a title and optionally upload the video. The lesson is saved straight away and stays hidden until you publish it.
               </p>
             </div>
 
@@ -1128,18 +1329,17 @@ const CourseForm = () => {
               />
             </div>
 
-            <label className="flex w-fit cursor-pointer items-center gap-2.5 rounded-lg border border-gray-200 bg-white px-3 py-2">
-              <input
-                type="checkbox"
-                checked={Boolean(newVideo.upcoming)}
-                onChange={(e) => setNewVideo({ ...newVideo, upcoming: e.target.checked })}
-                className="h-4 w-4 accent-primary-600"
-              />
-              <span className="text-sm text-gray-700">
-                <span className="font-semibold">Upcoming lesson</span>
-                <span className="text-gray-500"> · shown locked to learners; the video can be added later</span>
-              </span>
-            </label>
+            {form.modules.length > 0 && (
+              <select
+                value={newVideo.moduleId}
+                onChange={(e) => setNewVideo({ ...newVideo, moduleId: e.target.value })}
+                aria-label="Module for the new lesson"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Course content (no module)</option>
+                {form.modules.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+              </select>
+            )}
 
             {/* Video upload */}
             <div className="flex items-center gap-3">
@@ -1152,6 +1352,14 @@ const CourseForm = () => {
                   </span>
                 )}
               </div>
+
+              <input
+                type="file"
+                ref={resumeInputRef}
+                onChange={handleResumeUpload}
+                accept="video/*"
+                className="hidden"
+              />
 
               <input
                 type="file"
@@ -1192,7 +1400,7 @@ const CourseForm = () => {
               type="button"
               onClick={addVideo}
               disabled={
-                Boolean(replaceTargetId) || !newVideo.title || (!newVideo.videoId && !newVideo.upcoming) || uploadingLessonVideo || lessonBusy
+                Boolean(replaceTargetId) || !newVideo.title || uploadingLessonVideo || lessonBusy
               }
               className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -1204,7 +1412,14 @@ const CourseForm = () => {
 
         </div>
       )}
+      <ConfirmModal confirm={confirm} busy={lessonBusy} onCancel={() => setConfirm(null)} />
       <VideoPreviewModal preview={preview} onClose={() => setPreview(null)} />
+      <DeleteLessonModal
+        lesson={lessonToDelete}
+        busy={lessonBusy}
+        onCancel={() => setLessonToDelete(null)}
+        onConfirm={confirmRemoveVideo}
+      />
     </div>
   );
 };
