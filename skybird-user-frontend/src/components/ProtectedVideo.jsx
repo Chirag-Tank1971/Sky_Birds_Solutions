@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import playerjs from "player.js";
 import { useUser } from "../context/UserContext";
 import API from "../api/axios";
 import { Lock, ShieldAlert, Maximize, Minimize } from "lucide-react";
@@ -9,8 +10,10 @@ const API_BASE = API.defaults.baseURL.replace(/\/+$/, "");
 const API_ORIGIN = API_BASE.replace(/\/api$/, "");
 // Give up after this many back-to-back failed refreshes.
 const MAX_REFRESH_ATTEMPTS = 3;
+const PROGRESS_SAVE_MS = 15000;
 
-export default function ProtectedVideo({ title, courseId, videoId }) {
+// startAt: second to resume from. onProgress(seconds, duration, completed) runs each time progress is saved.
+export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, onProgress }) {
   const { user, token } = useUser();
   const containerRef = useRef(null);
   const videoRef = useRef(null);
@@ -21,7 +24,79 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Signed Bunny Stream embed link for lessons hosted on Bunny; empty for legacy HLS lessons.
   const [embedUrl, setEmbedUrl] = useState("");
- 
+  const iframeRef = useRef(null);
+  const startAtRef = useRef(startAt);
+  const onProgressRef = useRef(onProgress);
+  const trackerRef = useRef(null);
+
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+  });
+
+  // Saves progress while playing, and on pause, finish, leaving the lesson or closing the tab.
+  useEffect(() => {
+    if (!token || !courseId || !videoId) return undefined;
+    const video = videoRef.current;
+    let latest = null;
+    let sentSeconds = -1;
+    let sentAt = Date.now();
+
+    const send = (completed = false) => {
+      if (!latest || (!completed && latest.seconds === sentSeconds)) return;
+      sentAt = Date.now();
+      sentSeconds = latest.seconds;
+      onProgressRef.current?.(latest.seconds, latest.duration, completed);
+      fetch(`${API_BASE}/customer/progress/${encodeURIComponent(courseId)}/${encodeURIComponent(videoId)}`, {
+        method: "PUT",
+        // keepalive lets the last save finish while the tab closes.
+        keepalive: true,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ position: latest.seconds, duration: latest.duration, completed }),
+      }).catch(() => {});
+    };
+    const tick = (seconds, duration) => {
+      if (!(seconds > 0)) return;
+      latest = { seconds: Math.floor(seconds), duration: Number.isFinite(duration) ? Math.floor(duration) : 0 };
+      if (Date.now() - sentAt >= PROGRESS_SAVE_MS) send();
+    };
+    trackerRef.current = { tick, send };
+
+    const onTime = () => tick(video.currentTime, video.duration);
+    const onPause = () => send();
+    const onEnded = () => send(true);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") send();
+    };
+    video?.addEventListener("timeupdate", onTime);
+    video?.addEventListener("pause", onPause);
+    video?.addEventListener("ended", onEnded);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPause);
+
+    return () => {
+      video?.removeEventListener("timeupdate", onTime);
+      video?.removeEventListener("pause", onPause);
+      video?.removeEventListener("ended", onEnded);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPause);
+      send();
+      trackerRef.current = null;
+    };
+  }, [courseId, videoId, token]);
+
+  // Bunny's player runs in an iframe and reports playback through the player.js protocol.
+  useEffect(() => {
+    if (!embedUrl || !iframeRef.current) return;
+    const player = new playerjs.Player(iframeRef.current);
+    player.on("ready", () => {
+      player.on("timeupdate", (data) => {
+        const time = typeof data === "string" ? JSON.parse(data) : data;
+        trackerRef.current?.tick(Number(time?.seconds), Number(time?.duration));
+      });
+      player.on("pause", () => trackerRef.current?.send());
+      player.on("ended", () => trackerRef.current?.send(true));
+    });
+  }, [embedUrl]);
 
   useEffect(() => {
     let active = true;
@@ -155,12 +230,19 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
         if (!active) return;
         // Bunny lessons play in Bunny's player; it signs its own media requests.
         if (auth.provider === "bunny") {
-          setEmbedUrl(auth.embedUrl);
+          const url = new URL(auth.embedUrl);
+          // Our saved position decides where to start, on every device.
+          url.searchParams.set("rememberPosition", "false");
+          if (startAtRef.current > 0) url.searchParams.set("t", String(Math.floor(startAtRef.current)));
+          setEmbedUrl(url.toString());
           setLoadingStream(false);
           return;
         }
         if (!video) throw new Error("Video player is unavailable");
         const streamUrl = streamUrlFor(auth);
+        if (startAtRef.current > 0) {
+          video.addEventListener("loadedmetadata", () => { video.currentTime = startAtRef.current; }, { once: true });
+        }
 
         // hls.js first: recent Chrome also reports native HLS, but its token and error handling live here.
         if (!Hls.isSupported() && video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -293,6 +375,7 @@ export default function ProtectedVideo({ title, courseId, videoId }) {
       >
         {embedUrl && (
           <iframe
+            ref={iframeRef}
             src={embedUrl}
             title={title}
             className="absolute inset-0 h-full w-full border-0"

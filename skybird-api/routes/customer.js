@@ -6,6 +6,9 @@ const {
   getProfile,
   updateProfile,
   getTransactions,
+  saveLessonProgress,
+  getCourseProgress,
+  getWatchHistory,
 } = require("../controllers/customerController");
 const { sendContactOtp, verifyContactOtp, changePassword } = require("../controllers/authController");
 
@@ -15,6 +18,9 @@ router.get("/purchased", getPurchasedCourses);
 router.get("/profile", getProfile);
 router.put("/profile", updateProfile);
 router.get("/transactions", getTransactions);
+router.get("/history", getWatchHistory);
+router.get("/progress/:courseId", getCourseProgress);
+router.put("/progress/:courseId/:lessonId", saveLessonProgress);
 router.post("/password", changePassword);
 router.post("/contact/send-otp", sendContactOtp);
 router.post("/contact/verify-otp", verifyContactOtp);

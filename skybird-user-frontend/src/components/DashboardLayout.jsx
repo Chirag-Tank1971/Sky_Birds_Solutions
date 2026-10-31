@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Compass,
   CreditCard,
+  History,
   LogOut,
   Menu,
   Settings,
@@ -24,6 +25,7 @@ const sections = [
     items: [
       { to: "/dashboard", label: "My Courses", icon: BookOpen },
       { to: "/dashboard/explore", label: "Explore Courses", icon: Compass },
+      { to: "/dashboard/history", label: "Watch History", icon: History },
       { to: "/dashboard/sessions", label: "My Sessions", icon: CalendarDays },
       { to: "/dashboard/communities", label: "Communities", icon: Users },
       { to: "/dashboard/assessments", label: "My Assessments", icon: ClipboardList },

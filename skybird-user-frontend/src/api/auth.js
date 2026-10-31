@@ -79,3 +79,13 @@ export async function getPurchasedCourses() {
   const { data } = await API.get("/customer/purchased")
   return data
 }
+
+export async function getCourseProgress(courseId) {
+  const { data } = await API.get(`/customer/progress/${encodeURIComponent(courseId)}`)
+  return data
+}
+
+export async function getWatchHistory() {
+  const { data } = await API.get("/customer/history")
+  return data
+}

@@ -13,6 +13,7 @@ const Contact = lazy(() => import("./pages/Contact"));
 const DashboardLayout = lazy(() => import("./components/DashboardLayout"));
 const MyCourses = lazy(() => import("./pages/dashboard/MyCourses"));
 const Transactions = lazy(() => import("./pages/dashboard/Transactions"));
+const History = lazy(() => import("./pages/dashboard/History"));
 const Settings = lazy(() => import("./pages/dashboard/Settings"));
 const ComingSoon = lazy(() => import("./pages/dashboard/ComingSoon"));
 const Watch = lazy(() => import("./pages/Watch"));
@@ -78,6 +79,7 @@ export default function App() {
           >
             <Route index element={<LazyPage component={MyCourses} />} />
             <Route path="explore" element={<LazyPage component={Courses} />} />
+            <Route path="history" element={<LazyPage component={History} />} />
             <Route path="sessions" element={<LazyPage component={ComingSoon} />} />
             <Route path="communities" element={<LazyPage component={ComingSoon} />} />
             <Route path="assessments" element={<LazyPage component={ComingSoon} />} />

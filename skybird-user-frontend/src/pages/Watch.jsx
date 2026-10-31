@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useCallback, useEffect, useState } from "react"
 import {
   Link,
   Navigate,
@@ -17,7 +17,8 @@ import {
 } from "lucide-react"
 import ProtectedVideo from "../components/ProtectedVideo"
 import { fetchCourseById } from "../api/courses"
-import { groupLessons } from "../data/courseModules"
+import { formatTime, groupLessons, nextLesson } from "../data/courseModules"
+import { getCourseProgress } from "../api/auth"
 import { useUser } from "../context/UserContext"
 
 export default function Watch() {
@@ -29,6 +30,38 @@ export default function Watch() {
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  // lessonId -> saved progress. Null until loaded, so a lesson doesn't start before its saved position is known.
+  const [progress, setProgress] = useState(null)
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined
+    let cancelled = false
+    getCourseProgress(courseId)
+      .then((res) => {
+        if (!cancelled) setProgress(Object.fromEntries((res.data || []).map((item) => [item.lessonId, item])))
+      })
+      .catch(() => {
+        // Without saved progress lessons still play, from the start.
+        if (!cancelled) setProgress({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [courseId, isAuthenticated])
+
+  const handleProgress = useCallback((lessonId, position, duration, completed) => {
+    setProgress((prev) => ({
+      ...prev,
+      [lessonId]: {
+        ...prev?.[lessonId],
+        lessonId,
+        position,
+        duration,
+        completed: Boolean(completed || prev?.[lessonId]?.completed || (duration && position / duration >= 0.95)),
+        lastWatchedAt: new Date().toISOString(),
+      },
+    }))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -134,13 +167,20 @@ export default function Watch() {
   const orderedLessons = groups.flatMap((group) => group.lessons)
   const showModules = groups.some((group) => group.id)
 
-  if (orderedLessons.length) {
-    // An unknown or missing lesson id opens the first playable lesson.
-    selectedVideo =
-      (videoId && orderedLessons.find((v) => v.id === videoId)) ||
-      orderedLessons.find((v) => !v.upcoming) ||
-      orderedLessons[0]
-  }
+  // No lesson chosen (or an unknown one) shows the course overview; playback starts when the student picks.
+  if (videoId) selectedVideo = orderedLessons.find((v) => v.id === videoId) || null
+
+  const saved = progress || {}
+  const selectedSaved = selectedVideo ? saved[selectedVideo.id] : null
+  // A finished lesson, or one stopped in its last seconds, starts again from the beginning.
+  const startAt =
+    selectedSaved && !selectedSaved.completed && !(selectedSaved.duration && selectedSaved.position >= selectedSaved.duration - 10)
+      ? selectedSaved.position
+      : 0
+  const next = nextLesson(orderedLessons, saved)
+  const completedCount = orderedLessons.filter((v) => !v.upcoming && saved[v.id]?.completed).length
+  const playableCount = orderedLessons.filter((v) => !v.upcoming).length
+  const lessonLink = (lesson) => `/watch/${encodeURIComponent(course.id)}?v=${encodeURIComponent(lesson.id)}`
 
   const title = selectedVideo?.title || course.title
   const secureVideoId = selectedVideo?.videoId || ""
@@ -157,14 +197,14 @@ export default function Watch() {
         {/* TOP NAV */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Link
-            to="/dashboard"
+            to={selectedVideo ? `/watch/${encodeURIComponent(course.id)}` : "/dashboard"}
             className="group inline-flex items-center gap-2 text-sm font-semibold text-forest transition hover:text-leaf"
           >
             <span className="grid h-9 w-9 place-items-center rounded-full border border-forest/10 bg-white shadow-sm transition group-hover:-translate-x-1">
               <ArrowLeft size={16} />
             </span>
 
-            <span>Back to Dashboard</span>
+            <span>{selectedVideo ? "Back to course" : "Back to Dashboard"}</span>
           </Link>
 
           {/* Course badge */}
@@ -219,7 +259,36 @@ export default function Watch() {
 
         {/* VIDEO */}
         <div className="mt-7">
-          {secureVideoId ? (
+          {!selectedVideo ? (
+            <div className="rounded-[1.5rem] border border-forest/10 bg-white p-6 shadow-sm sm:p-8">
+              <div className="flex flex-wrap items-center justify-between gap-5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-forest">
+                    {completedCount} of {playableCount} {playableCount === 1 ? "lesson" : "lessons"} completed
+                  </p>
+                  <h2 className="mt-1 break-words text-xl font-extrabold text-ink">
+                    {next.lesson ? next.lesson.title : "No lessons available yet"}
+                  </h2>
+                  {next.state === "resume" && saved[next.lesson.id] ? (
+                    <p className="mt-1 text-sm text-slate-500">You stopped at {formatTime(saved[next.lesson.id].position)}</p>
+                  ) : null}
+                  <div className="mt-3 h-2 max-w-md overflow-hidden rounded-full bg-gray-100">
+                    <div className="h-full rounded-full bg-leaf" style={{ width: `${playableCount ? Math.round((completedCount / playableCount) * 100) : 0}%` }} />
+                  </div>
+                </div>
+                {next.lesson && progress ? (
+                  <Link to={lessonLink(next.lesson)} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-leaf px-6 py-3 text-sm font-bold text-white transition hover:bg-forest">
+                    <PlayCircle size={18} />
+                    {{ start: "Start learning", resume: "Continue learning", next: "Next lesson", again: "Watch again" }[next.state]}
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          ) : secureVideoId && !progress ? (
+            <div className="flex aspect-video items-center justify-center rounded-[1.5rem] bg-black sm:rounded-[2rem]">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            </div>
+          ) : secureVideoId ? (
             <div className="relative overflow-hidden rounded-[1.5rem] border border-black/5 bg-black shadow-2xl shadow-forest/10 sm:rounded-[2rem]">
               {/* Top Video Bar */}
               <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent px-4 py-4 sm:px-6 sm:py-5">
@@ -239,9 +308,12 @@ export default function Watch() {
               </div>
 
               <ProtectedVideo
+                key={selectedVideo.id}
                 title={title}
                 courseId={course.id}
-                videoId={selectedVideo?.id}
+                videoId={selectedVideo.id}
+                startAt={startAt}
+                onProgress={(position, duration, completed) => handleProgress(selectedVideo.id, position, duration, completed)}
               />
             </div>
           ) : (
@@ -266,7 +338,7 @@ export default function Watch() {
         </div>
 
         {/* LESSONS */}
-        {course.videos?.length > 1 ? (
+        {orderedLessons.length > 0 ? (
           <section className="mt-10">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
               <div>
@@ -327,7 +399,7 @@ export default function Watch() {
                   return (
                     <Link
                       key={v.id || i}
-                      to={`/watch/${course.id}?v=${v.id}`}
+                      to={lessonLink(v)}
                       className={`group flex items-center gap-3 px-4 py-4 transition sm:px-5 ${
                         isActive
                           ? "bg-mint/60"
@@ -344,6 +416,8 @@ export default function Watch() {
                       >
                         {isActive ? (
                           <PlayCircle size={17} />
+                        ) : saved[v.id]?.completed ? (
+                          <CheckCircle2 size={17} aria-label="Completed" />
                         ) : (
                           String(i + 1).padStart(2, "0")
                         )}
@@ -365,6 +439,10 @@ export default function Watch() {
                           <p className="mt-1 text-[11px] font-medium text-leaf">
                             Currently playing
                           </p>
+                        ) : saved[v.id]?.completed ? (
+                          <p className="mt-1 text-[11px] font-medium text-leaf">Completed</p>
+                        ) : saved[v.id] ? (
+                          <p className="mt-1 text-[11px] font-medium text-slate-500">Stopped at {formatTime(saved[v.id].position)}</p>
                         ) : null}
                       </div>
 

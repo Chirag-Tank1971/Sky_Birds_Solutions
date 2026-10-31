@@ -18,7 +18,7 @@ export default function CourseCard({ course, size = "md" }) {
   const upcoming = course.status === "upcoming";
   const modules = moduleSummary(course);
   const large = size === "lg";
-  const href = owned ? `/watch/${course.id}` : `/courses/${course.id}`;
+  const href = owned ? `/watch/${encodeURIComponent(course.id)}` : `/courses/${course.id}`;
 
   return (
     <motion.article
