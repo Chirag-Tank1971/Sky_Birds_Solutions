@@ -13,6 +13,37 @@ const MAX_REFRESH_ATTEMPTS = 3;
 const PROGRESS_SAVE_MS = 15000;
 
 // startAt: second to resume from. onProgress(seconds, duration, completed) runs each time progress is saved.
+const WATERMARK_MOVE_MS = 6000;
+
+const nextWatermarkSpot = () => ({
+  x: Math.random() * 100,
+  y: Math.random() * 100,
+  time: new Date().toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }),
+});
+
+// Moves around so it can't be cropped out of a recording, and identifies the buyer if one leaks.
+function FloatingWatermark({ user }) {
+  const [spot, setSpot] = useState(nextWatermarkSpot);
+
+  useEffect(() => {
+    const timer = setInterval(() => setSpot(nextWatermarkSpot()), WATERMARK_MOVE_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  const contact = user?.mobile ? `+91 ${user.mobile}` : user?.email || "SkyBirds Learner";
+  const id = user?.id ? ` · ID ${String(user.id).slice(-6)}` : "";
+
+  return (
+    <p
+      // Matching left/top and translate keep the text fully inside the video at any position.
+      style={{ left: `${spot.x}%`, top: `${spot.y}%`, transform: `translate(-${spot.x}%, -${spot.y}%)` }}
+      className="absolute max-w-full truncate rounded bg-black/25 px-1.5 py-0.5 text-[8px] font-semibold text-white/60 transition-all duration-1000 motion-reduce:transition-none sm:text-[10px]"
+    >
+      {contact}{id} · {spot.time}
+    </p>
+  );
+}
+
 export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, onProgress }) {
   const { user, token } = useUser();
   const containerRef = useRef(null);
@@ -362,8 +393,6 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
     }
   };
 
-  const watermarkText = `${user?.email || (user?.mobile ? `+91 ${user.mobile}` : "SkyBirds Learner")} • AUTHORIZED VIEWER`;
-
   return (
     <div className="select-none">
       <div
@@ -414,16 +443,7 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
 
         {/* Watermark stays inside the fullscreen element */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden select-none">
-          <div className="absolute inset-0 origin-center rotate-[-15deg] opacity-20 flex flex-col justify-around">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <p
-                key={index}
-                className="whitespace-nowrap py-4 text-center text-[10px] sm:text-xs font-bold tracking-[0.25em] text-white drop-shadow"
-              >
-                {watermarkText}
-              </p>
-            ))}
-          </div>
+          <FloatingWatermark user={user} />
         </div>
 
         {!loadingStream && !streamError && (
