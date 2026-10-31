@@ -107,7 +107,7 @@ export default function DashboardLayout() {
           </div>
         </div>
 
-        <nav className="mt-3 flex-1 overflow-y-auto px-3 pb-3" aria-label="Dashboard">
+        <nav className="mt-3 flex-1 overflow-y-auto px-3 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Dashboard">
           {sections.map((section) => (
             <div key={section.title} className="mt-3">
               <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
