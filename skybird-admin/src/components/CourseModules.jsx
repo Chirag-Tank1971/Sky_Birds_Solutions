@@ -1,7 +1,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import {
-  AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Clock, Eye, History, Layers, Loader2, Lock, Pencil, Play, Plus, Radio, Trash2, Upload, X,
+  AlertTriangle, CheckCircle, ChevronDown, ChevronRight, ChevronUp, Clock, Eye, History, Layers, Loader2, Lock, Pencil, Play, Plus, Radio, Trash2, Upload, X,
 } from "lucide-react";
 import API from "../api/axios";
 import BulkUploadPanel from "./BulkUploadPanel";
@@ -173,6 +173,7 @@ const CourseModules = ({ courseId, modules, lessons, statusOf, renderLesson, onC
   const [newTitle, setNewTitle] = useState("");
   const [editing, setEditing] = useState(null);
   const [bulkOpen, setBulkOpen] = useState({});
+  const [folded, setFolded] = useState({});
   const [publishing, setPublishing] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [learnerView, setLearnerView] = useState(false);
@@ -286,7 +287,18 @@ const CourseModules = ({ courseId, modules, lessons, statusOf, renderLesson, onC
               </div>
             ) : (
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
+                <div className="flex min-w-0 items-start gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setFolded({ ...folded, [item.id]: !folded[item.id] })}
+                    aria-expanded={!folded[item.id]}
+                    aria-label={`${folded[item.id] ? "Unfold" : "Fold"} ${item.title}`}
+                    title={folded[item.id] ? "Unfold" : "Fold"}
+                    className="-ml-1 rounded p-0.5 text-gray-500 hover:bg-gray-100"
+                  >
+                    {folded[item.id] ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                  <div className="min-w-0">
                   <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-900">
                     <span className="break-words">{item.title}</span>
                     {item.upcoming ? (
@@ -300,6 +312,7 @@ const CourseModules = ({ courseId, modules, lessons, statusOf, renderLesson, onC
                     {moduleLessons.length === 0 ? "No lessons yet" : `${readyCount} of ${moduleLessons.length} ready`}
                     {totalDuration(moduleLessons) ? ` · ${totalDuration(moduleLessons)}` : ""}
                   </p>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1">
                   <button type="button" onClick={() => moveModule(index, -1)} disabled={busy || index === 0} aria-label={`Move ${item.title} up`} className="rounded p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-25"><ChevronUp className="h-4 w-4" /></button>
@@ -350,7 +363,7 @@ const CourseModules = ({ courseId, modules, lessons, statusOf, renderLesson, onC
                 />
               </div>
             )}
-            {moduleLessons.length > 0 && <div className="mt-3 space-y-3">{moduleLessons.map((lesson, lessonIndex) => renderLesson(lesson, lessonIndex, moduleLessons.length))}</div>}
+            {moduleLessons.length > 0 && !folded[item.id] && <div className="mt-3 space-y-3">{moduleLessons.map((lesson, lessonIndex) => renderLesson(lesson, lessonIndex, moduleLessons.length))}</div>}
           </section>
         );
       })}
