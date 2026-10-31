@@ -23,6 +23,7 @@ const {
   getAllCoursesAdmin,
   addVideoToCourse,
   removeVideoFromCourse,
+  removeVideosFromCourse,
   setCourseStatus,
   getCourseAdmin,
   updateLesson,
@@ -182,6 +183,7 @@ router.post(
 router.put("/courses/:id/videos/order", reorderLessons);
 router.put("/courses/:id/videos/:videoId", updateLesson);
 router.delete("/courses/:id/videos/:videoId", removeVideoFromCourse);
+router.post("/courses/:id/videos/bulk-delete", removeVideosFromCourse);
 
 router.get("/learning-content", getContentAdmin);
 router.post("/learning-content", createContent);

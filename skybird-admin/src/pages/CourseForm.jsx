@@ -310,6 +310,7 @@ const CourseForm = () => {
   // Videos already saved on the course have no entry and are treated as ready.
   const [videoStatus, setVideoStatus] = useState({});
   const [lessonToDelete, setLessonToDelete] = useState(null);
+  const [selectedLessons, setSelectedLessons] = useState([]);
   // Encoding progress (0-100) reported by Bunny, and a tick that keeps polling while anything is processing.
   const [videoProgress, setVideoProgress] = useState({});
   const [pollTick, setPollTick] = useState(0);
@@ -811,6 +812,35 @@ const CourseForm = () => {
     }
   };
 
+  const selectLessons = (ids, checked) =>
+    setSelectedLessons((prev) => (checked ? [...new Set([...prev, ...ids])] : prev.filter((lessonId) => !ids.includes(lessonId))));
+
+  const deleteSelectedLessons = () => {
+    const ids = selectedLessons.filter((lessonId) => form.videos.some((video) => video.id === lessonId));
+    const count = ids.length;
+    const all = count === form.videos.length;
+    setConfirm({
+      title: all ? `Delete all ${count} lessons?` : `Delete ${count} ${count === 1 ? "lesson" : "lessons"}?`,
+      message: "These lessons and their videos will be permanently removed from this course, including for learners who bought it. This can't be undone.",
+      label: all ? "Delete all lessons" : `Delete ${count} ${count === 1 ? "lesson" : "lessons"}`,
+      danger: true,
+      onConfirm: async () => {
+        setLessonBusy(true);
+        try {
+          const { data } = await API.post(`/admin/courses/${id}/videos/bulk-delete`, { ids });
+          applyCourse(data.data);
+          setSelectedLessons([]);
+          toast.success(`${count} ${count === 1 ? "lesson" : "lessons"} removed`);
+        } catch (err) {
+          lessonError(err, "Couldn't remove the lessons");
+        } finally {
+          setLessonBusy(false);
+          setConfirm(null);
+        }
+      },
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -864,6 +894,14 @@ const CourseForm = () => {
                   key={v.id}
                   className="flex flex-wrap items-center gap-3 p-3.5 bg-gray-50 rounded-xl border border-gray-200"
                 >
+                  <input
+                    type="checkbox"
+                    checked={selectedLessons.includes(v.id)}
+                    onChange={(e) => selectLessons([v.id], e.target.checked)}
+                    disabled={lessonBusy}
+                    aria-label={`Select ${v.title}`}
+                    className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 accent-primary-600"
+                  />
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs font-bold text-gray-400 w-6 text-center">#{idx + 1}</span>
                     <button type="button" onClick={() => moveVideo(v.id, -1)} disabled={idx === 0 || lessonBusy} aria-label={`Move ${v.title} up`} title="Move up" className="p-1 rounded text-gray-500 hover:bg-gray-200 disabled:opacity-25 disabled:cursor-not-allowed">
@@ -1288,6 +1326,10 @@ const CourseForm = () => {
             onBlocked={markBlockedLessons}
             onBusyChange={setBulkUploading}
             onPlay={handlePreviewVideo}
+            selected={selectedLessons.filter((lessonId) => form.videos.some((video) => video.id === lessonId))}
+            onSelect={selectLessons}
+            onDeleteSelected={deleteSelectedLessons}
+            deleting={lessonBusy}
           />
 
           {/* Add video form */}

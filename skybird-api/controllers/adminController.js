@@ -747,6 +747,27 @@ exports.removeVideoFromCourse = async (req, res) => {
   }
 };
 
+// All or nothing: one unknown id, or leaving a course on sale with nothing to play, changes nothing.
+exports.removeVideosFromCourse = async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(String))] : [];
+    if (ids.length === 0) return res.status(400).json({ success: false, message: "Select at least one lesson" });
+    let removed;
+    const { course } = await editCourse(req.params.id, (doc) => {
+      removed = doc.videos.filter((v) => ids.includes(v.id));
+      if (removed.length !== ids.length) throw new CourseEditError(404, "One of these lessons no longer exists. Refresh and try again.");
+      doc.videos = doc.videos.filter((v) => !ids.includes(v.id));
+      doc.lessons = doc.videos.length;
+      assertPlayableIfSold(doc, "Make the course unlive or upcoming before removing all its lessons.");
+    });
+    await deleteUnusedVideos(videoIdsOf(removed));
+    for (const lesson of removed) await recordAudit(req, course, "lesson_deleted", "lesson", lesson);
+    return res.status(200).json({ success: true, message: "Lessons removed", data: course });
+  } catch (error) {
+    return sendEditError(res, error, "Remove lessons failed", "Unable to remove the lessons");
+  }
+};
+
 exports.getAllCustomers = async (req, res) => {
   try {
     const customers = await User.find()

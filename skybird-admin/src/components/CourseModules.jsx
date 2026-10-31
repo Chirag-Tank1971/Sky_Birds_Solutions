@@ -48,13 +48,30 @@ export const ConfirmModal = ({ confirm, busy, onCancel }) => {
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" autoFocus onClick={onCancel} disabled={busy} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-          <button type="button" onClick={confirm.onConfirm} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+          <button type="button" onClick={confirm.onConfirm} disabled={busy} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${confirm.danger ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}`}>
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             {confirm.label}
           </button>
         </div>
       </div>
     </div>
+  );
+};
+
+// Ticks every lesson in the list; shows a dash when only some are ticked.
+const SelectAllBox = ({ ids, selected, onSelect, label, busy }) => {
+  const count = ids.filter((id) => selected.includes(id)).length;
+  return (
+    <input
+      type="checkbox"
+      ref={(box) => { if (box) box.indeterminate = count > 0 && count < ids.length; }}
+      checked={ids.length > 0 && count === ids.length}
+      disabled={busy || ids.length === 0}
+      onChange={(event) => onSelect(ids, event.target.checked)}
+      aria-label={label}
+      title={label}
+      className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 accent-primary-600 disabled:cursor-not-allowed disabled:opacity-40"
+    />
   );
 };
 
@@ -168,7 +185,7 @@ const CourseActivity = ({ courseId }) => {
   );
 };
 
-const CourseModules = ({ courseId, modules, lessons, statusOf, renderLesson, onCourse, onCreated, onUploaded, onBlocked, onBusyChange, onPlay }) => {
+const CourseModules = ({ courseId, modules, lessons, statusOf, renderLesson, onCourse, onCreated, onUploaded, onBlocked, onBusyChange, onPlay, selected, onSelect, onDeleteSelected, deleting }) => {
   const [busy, setBusy] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [editing, setEditing] = useState(null);
@@ -262,9 +279,30 @@ const CourseModules = ({ courseId, modules, lessons, statusOf, renderLesson, onC
         </button>
       </div>
 
+      {lessons.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
+            <SelectAllBox ids={lessons.map((lesson) => lesson.id)} selected={selected} onSelect={onSelect} label="Select all lessons" busy={deleting} />
+            Select all lessons
+            <span className="font-normal text-gray-500">({selected.length} of {lessons.length} selected)</span>
+          </label>
+          {selected.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => onSelect(selected, false)} disabled={deleting} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200 disabled:opacity-50">Clear</button>
+              <button type="button" onClick={onDeleteSelected} disabled={deleting} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50">
+                <Trash2 className="h-3.5 w-3.5" /> {selected.length === lessons.length ? "Delete all" : `Delete selected (${selected.length})`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {ungrouped.length > 0 && (
         <section className="rounded-xl border border-gray-200 p-4">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900"><Layers className="h-4 w-4 text-gray-500" /> Course content</h3>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+            <SelectAllBox ids={ungrouped.map((lesson) => lesson.id)} selected={selected} onSelect={onSelect} label="Select all lessons in Course content" busy={deleting} />
+            <Layers className="h-4 w-4 text-gray-500" /> Course content
+          </h3>
           {modules.length > 0 && <p className="mt-0.5 text-xs text-gray-500">Lessons not in a module. Learners see these first.</p>}
           <div className="mt-3 space-y-3">{ungrouped.map((lesson, index) => renderLesson(lesson, index, ungrouped.length))}</div>
         </section>
@@ -288,6 +326,7 @@ const CourseModules = ({ courseId, modules, lessons, statusOf, renderLesson, onC
             ) : (
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-1.5">
+                  <span className="mt-0.5"><SelectAllBox ids={moduleLessons.map((lesson) => lesson.id)} selected={selected} onSelect={onSelect} label={`Select all lessons in ${item.title}`} busy={deleting} /></span>
                   <button
                     type="button"
                     onClick={() => setFolded({ ...folded, [item.id]: !folded[item.id] })}
