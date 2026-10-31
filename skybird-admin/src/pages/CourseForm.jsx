@@ -334,8 +334,9 @@ const CourseForm = () => {
             if (video.status !== "processing") updates[videoId] = video.status;
             else if (video.rawStatus === 0 && !uploadedIdsRef.current.has(videoId)) updates[videoId] = "not_uploaded";
           });
-        } catch {
+        } catch (err) {
           // Keep polling; a temporary network error should not mark the videos failed.
+          if (err.response?.status === 503) toast.error(err.response.data?.message || "Video service is not available", { id: "video-status-error" });
         }
       }
       for (const videoId of pending.filter((id) => !bunnyIds[id])) {
