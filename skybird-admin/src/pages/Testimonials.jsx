@@ -1,7 +1,57 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Hls from 'hls.js';
 import API from '../api/axios';
 import toast from 'react-hot-toast';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Pencil, Play, Plus, Trash2, X } from 'lucide-react';
+
+// Videos stored with the user site have a path on that site, not on this admin panel.
+const SITE_URL = (import.meta.env.VITE_SITE_URL || 'https://sky-birds-solutions.vercel.app').replace(/\/+$/, '');
+const videoSource = (url) => (url?.startsWith('/') ? `${SITE_URL}${url}` : url);
+
+const VideoPreview = ({ item, onClose }) => {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const url = videoSource(item.videoUrl);
+    let hls;
+    if (url.endsWith('.m3u8') && Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) toast.error('Unable to play this video');
+      });
+    } else {
+      video.src = url;
+    }
+    return () => {
+      if (hls) hls.destroy();
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    };
+  }, [item]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label={`Video from ${item.name}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+          <h2 className="truncate text-sm font-semibold text-gray-900">{item.name}</h2>
+          <button type="button" onClick={onClose} aria-label="Close video" className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+        </div>
+        <video
+          ref={videoRef}
+          controls
+          autoPlay
+          playsInline
+          onError={() => { if (!videoRef.current?.src.endsWith('.m3u8')) toast.error('Unable to play this video'); }}
+          className="max-h-[75vh] w-full bg-black"
+        />
+      </div>
+    </div>
+  );
+};
 
 const Testimonials = () => {
   const [items, setItems] = useState([]);
@@ -9,6 +59,7 @@ const Testimonials = () => {
   const [saving, setSaving] = useState(false);
   const [show, setShow] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [previewing, setPreviewing] = useState(null);
   const [form, setForm] = useState({ name: '', role: '', quote: '', order: 0, isActive: true, video: null });
 
   const load = async () => {
@@ -57,12 +108,14 @@ const Testimonials = () => {
 
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
       <div className="overflow-x-auto"><table className="w-full"><thead className="border-b border-gray-200 bg-gray-50"><tr>
-        {['Order','Name','Role','Quote','Status','Actions'].map((h) => <th key={h} className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">{h}</th>)}
+        {['Order','Video','Name','Role','Quote','Status','Actions'].map((h) => <th key={h} className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">{h}</th>)}
       </tr></thead><tbody className="divide-y divide-gray-100">
-        {items.map((item) => <tr key={item.id} className="hover:bg-gray-50"><td className="px-6 py-4 text-sm">{item.order}</td><td className="px-6 py-4 text-sm font-medium text-gray-900">{item.name}</td><td className="px-6 py-4 text-sm text-gray-500">{item.role}</td><td className="max-w-md px-6 py-4 text-sm text-gray-500">{item.quote}</td><td className="px-6 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.isActive ? 'Active' : 'Hidden'}</span></td><td className="px-6 py-4"><div className="flex gap-2"><button onClick={() => openEdit(item)} className="rounded-lg p-1.5 text-gray-500 hover:bg-primary-50 hover:text-primary-600"><Pencil className="h-4 w-4" /></button><button onClick={() => remove(item.id)} className="rounded-lg p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}
-        {!items.length && <tr><td colSpan="6" className="px-6 py-12 text-center text-gray-400">No testimonial videos uploaded yet.</td></tr>}
+        {items.map((item) => <tr key={item.id} className="hover:bg-gray-50"><td className="px-6 py-4 text-sm">{item.order}</td><td className="px-6 py-4"><button type="button" onClick={() => setPreviewing(item)} aria-label={`Play video from ${item.name}`} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"><Play className="h-3.5 w-3.5" /> Play</button></td><td className="px-6 py-4 text-sm font-medium text-gray-900">{item.name}</td><td className="px-6 py-4 text-sm text-gray-500">{item.role}</td><td className="max-w-md px-6 py-4 text-sm text-gray-500">{item.quote}</td><td className="px-6 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.isActive ? 'Active' : 'Hidden'}</span></td><td className="px-6 py-4"><div className="flex gap-2"><button onClick={() => openEdit(item)} className="rounded-lg p-1.5 text-gray-500 hover:bg-primary-50 hover:text-primary-600"><Pencil className="h-4 w-4" /></button><button onClick={() => remove(item.id)} className="rounded-lg p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}
+        {!items.length && <tr><td colSpan="7" className="px-6 py-12 text-center text-gray-400">No testimonial videos uploaded yet.</td></tr>}
       </tbody></table></div>
     </div>
+
+    {previewing && <VideoPreview item={previewing} onClose={() => setPreviewing(null)} />}
 
     {show && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><form onSubmit={submit} className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-semibold">{editing ? 'Edit Testimonial' : 'Add Testimonial'}</h2><p className="text-sm text-gray-500">{editing ? 'Update testimonial text and visibility.' : 'The video is converted to HLS after upload.'}</p></div><button type="button" onClick={() => setShow(false)}><X /></button></div>
       <div className="space-y-4">

@@ -89,3 +89,8 @@ export async function getWatchHistory() {
   const { data } = await API.get("/customer/history")
   return data
 }
+
+export async function getLearningContent(type) {
+  const { data } = await API.get(`/customer/learning-content/${type}`)
+  return data
+}

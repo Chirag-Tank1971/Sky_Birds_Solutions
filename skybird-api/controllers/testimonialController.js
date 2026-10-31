@@ -23,7 +23,7 @@ exports.getPublicTestimonials = async (req, res) => {
       success: true,
       data: items.map((item) => ({
         ...item,
-        videoUrl: `${base}/${item.id}/master.m3u8`,
+        videoUrl: item.videoUrl || `${base}/${item.id}/master.m3u8`,
       })),
     });
   } catch (error) {
@@ -37,7 +37,7 @@ exports.getAdminTestimonials = async (req, res) => {
     const base = testimonialBase(req);
     res.json({
       success: true,
-      data: items.map((item) => ({ ...item, videoUrl: `${base}/${item.id}/master.m3u8` })),
+      data: items.map((item) => ({ ...item, videoUrl: item.videoUrl || `${base}/${item.id}/master.m3u8` })),
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -119,7 +119,7 @@ function sendFile(res, filePath, contentType) {
 async function getTestimonialVideo(req, res, filename) {
   try {
     const item = await Testimonial.findOne({ id: req.params.id, isActive: true }).lean();
-    if (!item) return res.status(404).end();
+    if (!item?.videoId) return res.status(404).end();
 
     const root = videoDir(item.videoId);
     const safe = filename === "master.m3u8" || filename === "media.m3u8" || filename === "enc.key" || /^segment_\d+\.ts$/.test(filename);

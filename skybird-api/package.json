@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "seed": "node seed.js",
     "test": "node --test --test-concurrency=1 \"test/*.test.js\"",
-    "set-admin-password": "node scripts/set-admin-password.js"
+    "set-admin-password": "node scripts/set-admin-password.js",
+    "import-testimonials": "node scripts/import-site-testimonials.js"
   },
   "keywords": [
     "express",

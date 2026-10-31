@@ -46,6 +46,7 @@ const {
   getCourseActivity,
 } = require("../controllers/moduleController");
 const rateLimit = require("../middleware/rateLimit");
+const { getContentAdmin, createContent, updateContent, deleteContent } = require("../controllers/learningContentController");
 const { getAdminSiteContent, updateSiteContent } = require("../controllers/siteController");
 const {
   getAdminTestimonials,
@@ -167,6 +168,11 @@ router.post(
 router.put("/courses/:id/videos/order", reorderLessons);
 router.put("/courses/:id/videos/:videoId", updateLesson);
 router.delete("/courses/:id/videos/:videoId", removeVideoFromCourse);
+
+router.get("/learning-content", getContentAdmin);
+router.post("/learning-content", createContent);
+router.put("/learning-content/:id", updateContent);
+router.delete("/learning-content/:id", deleteContent);
 
 router.get("/customers", getAllCustomers);
 router.get("/customers/:id", getCustomerById);

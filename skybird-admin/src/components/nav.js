@@ -1,4 +1,4 @@
-import { LayoutDashboard, Layers, BookOpen, Users, MessageSquare, Settings, Video, Tag } from 'lucide-react';
+import { LayoutDashboard, Layers, BookOpen, Users, MessageSquare, Settings, Video, Tag, GraduationCap } from 'lucide-react';
 
 // Shared by the sidebar (links) and the top bar (page title).
 export const navSections = [
@@ -18,6 +18,7 @@ export const navSections = [
     label: 'Customers',
     items: [
       { to: '/customers', icon: Users, label: 'Customers' },
+      { to: '/learning-hub', icon: GraduationCap, label: 'Learning Hub' },
       { to: '/queries', icon: MessageSquare, label: 'Queries' },
     ],
   },

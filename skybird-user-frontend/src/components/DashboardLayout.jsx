@@ -28,7 +28,7 @@ const sections = [
       { to: "/dashboard/history", label: "Watch History", icon: History },
       { to: "/dashboard/sessions", label: "My Sessions", icon: CalendarDays },
       { to: "/dashboard/communities", label: "Communities", icon: Users },
-      { to: "/dashboard/assessments", label: "My Assessments", icon: ClipboardList },
+      { to: "/dashboard/resources", label: "My Resources", icon: ClipboardList },
     ],
   },
   {

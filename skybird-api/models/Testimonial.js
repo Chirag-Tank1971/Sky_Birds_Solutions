@@ -6,7 +6,9 @@ const testimonialSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     role: { type: String, default: "" },
     quote: { type: String, default: "" },
-    videoId: { type: String, required: true },
+    // A processed upload (videoId), or a video stored with the user site (videoUrl, a path on that site).
+    videoId: { type: String, required() { return !this.videoUrl; } },
+    videoUrl: { type: String, default: "" },
     isActive: { type: Boolean, default: true },
     order: { type: Number, default: 0 },
   },

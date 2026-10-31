@@ -82,7 +82,7 @@ export default function App() {
             <Route path="history" element={<LazyPage component={History} />} />
             <Route path="sessions" element={<LazyPage component={ComingSoon} />} />
             <Route path="communities" element={<LazyPage component={ComingSoon} />} />
-            <Route path="assessments" element={<LazyPage component={ComingSoon} />} />
+            <Route path="resources" element={<LazyPage component={ComingSoon} />} />
             <Route path="transactions" element={<LazyPage component={Transactions} />} />
             <Route path="rewards" element={<LazyPage component={ComingSoon} />} />
             <Route path="settings" element={<LazyPage component={Settings} />} />

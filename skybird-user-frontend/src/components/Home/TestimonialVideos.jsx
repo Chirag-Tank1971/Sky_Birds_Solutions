@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { fetchTestimonials } from "../../api/site";
 
+// Shown while loading and if the API can't be reached; afterwards the admin panel decides.
 const fallbackTestimonials = [
   {
     id: "local-3",
@@ -216,12 +217,7 @@ export default function TestimonialVideos() {
     let cancelled = false;
     fetchTestimonials()
       .then((res) => {
-        if (
-          !cancelled &&
-          res.success &&
-          Array.isArray(res.data) &&
-          res.data.length
-        )
+        if (!cancelled && res.success && Array.isArray(res.data))
           setTestimonials(res.data);
       })
       .catch(() => {});
@@ -240,6 +236,8 @@ export default function TestimonialVideos() {
 
   const arrow =
     "grid h-12 w-12 place-items-center rounded-full border border-forest/15 bg-white text-forest shadow-sm transition hover:-translate-y-0.5 hover:border-leaf hover:bg-leaf hover:text-white";
+
+  if (testimonials.length === 0) return null;
 
   return (
     <section className="relative overflow-hidden bg-[#f4f8f1] py-16 sm:py-24">

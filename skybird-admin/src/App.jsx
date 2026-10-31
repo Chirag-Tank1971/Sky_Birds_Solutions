@@ -11,6 +11,7 @@ import Queries from './pages/Queries';
 import SiteContent from './pages/SiteContent';
 import Testimonials from './pages/Testimonials';
 import Coupons from './pages/Coupons';
+import LearnerContent from './pages/LearnerContent';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -46,6 +47,7 @@ function App() {
         <Route path="site-content" element={<SiteContent />} />
         <Route path="testimonials" element={<Testimonials />} />
         <Route path="coupons" element={<Coupons />} />
+        <Route path="learning-hub" element={<LearnerContent />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
