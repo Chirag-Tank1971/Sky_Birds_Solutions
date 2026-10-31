@@ -3,6 +3,7 @@ const Course = require("../models/Course");
 const User = require("../models/User");
 const Contact = require("../models/Contact");
 const Payment = require("../models/Payment");
+const LearningContent = require("../models/LearningContent");
 const Testimonial = require("../models/Testimonial");
 const crypto = require("crypto");
 const bunnyStream = require("../services/bunnyStream");
@@ -503,38 +504,33 @@ exports.updateCourse = async (req, res) => {
   }
 };
 
+// Permanently deletes an empty course. Anything buyers or records still rely on keeps it in place.
 exports.deleteCourse = async (req, res) => {
   try {
-    let course = await Course.findOneAndUpdate(
-      { id: req.params.id },
-      { isActive: false, status: "unlive" },
-      { new: true }
-    );
+    const course = await findCourse(req.params.id);
+    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
 
-    if (!course) {
-      course = await Course.findByIdAndUpdate(
-        req.params.id,
-        { isActive: false, status: "unlive" },
-        { new: true }
-      );
+    const [buyer, payment, content] = await Promise.all([
+      User.exists({ "purchasedCourses.course": course._id }),
+      Payment.exists({ course: course._id, status: "paid" }),
+      LearningContent.exists({ course: course._id }),
+    ]);
+    if (buyer || payment) {
+      return res.status(409).json({ success: false, message: "This course has buyers or payments, so it can't be deleted. Keep it Unlive instead." });
+    }
+    if (content) {
+      return res.status(409).json({ success: false, message: "Learning Hub items are linked to this course. Remove or reassign them first." });
     }
 
-    if (!course) {
-      return res.status(404).json({
-        success: false,
-        message: "Course not found",
-      });
+    // Checked in the delete itself, so a lesson added a moment ago can't be lost.
+    const deleted = await Course.findOneAndDelete({ _id: course._id, "videos.0": { $exists: false }, "modules.0": { $exists: false } });
+    if (!deleted) {
+      return res.status(409).json({ success: false, message: "Only a course with no lessons and no modules can be deleted." });
     }
-
-    res.status(200).json({
-      success: true,
-      message: "Course deactivated",
-    });
+    return res.status(200).json({ success: true, message: "Course deleted" });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("Delete course failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to delete the course" });
   }
 };
 

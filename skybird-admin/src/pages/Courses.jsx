@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import API, { assetUrl } from '../api/axios';
 import toast from 'react-hot-toast';
-import { Plus, Pencil, Search } from 'lucide-react';
+import { Plus, Pencil, Search, Trash2 } from 'lucide-react';
+import { ConfirmModal } from '../components/CourseModules';
 
 const STATUS_STYLES = {
   live: 'bg-green-50 text-green-800 border-green-200',
@@ -16,6 +17,8 @@ const Courses = () => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [confirm, setConfirm] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchCourses = async () => {
     try {
@@ -41,6 +44,26 @@ const Courses = () => {
       toast.error(err.response?.data?.message || 'Could not change the status');
     }
   };
+
+  const askDelete = (course) => setConfirm({
+    title: `Delete ${course.title}?`,
+    message: "This course will be permanently removed. This can't be undone.",
+    label: 'Delete course',
+    danger: true,
+    onConfirm: async () => {
+      setDeleting(true);
+      try {
+        const { data } = await API.delete(`/admin/courses/${encodeURIComponent(course.id)}`);
+        setCourses((prev) => prev.filter((c) => c._id !== course._id));
+        toast.success(data.message || 'Course deleted');
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Could not delete the course');
+      } finally {
+        setDeleting(false);
+        setConfirm(null);
+      }
+    },
+  });
 
   const filtered = courses.filter(
     (c) =>
@@ -150,6 +173,17 @@ const Courses = () => {
                       >
                         <Pencil className="w-3.5 h-3.5" /> Manage
                       </Link>
+                      {!c.videos?.length && !c.modules?.length && (
+                        <button
+                          type="button"
+                          onClick={() => askDelete(c)}
+                          aria-label={`Delete ${c.title}`}
+                          title="Delete course"
+                          className="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -165,6 +199,8 @@ const Courses = () => {
           </table>
         </div>
       </div>
+
+      <ConfirmModal confirm={confirm} busy={deleting} onCancel={() => setConfirm(null)} />
     </div>
   );
 };
