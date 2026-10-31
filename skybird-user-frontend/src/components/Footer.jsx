@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchSiteContent } from "../api/site";
+import { fetchSiteContent, safeWebUrl } from "../api/site";
+import { useSitePreviewVersion } from "../lib/sitePreview";
 import { useUser } from "../context/UserContext";
 import RollText from "./RollText";
 
@@ -101,6 +102,8 @@ export default function Footer() {
     whatsapp: "",
   });
 
+  const previewVersion = useSitePreviewVersion();
+
   useEffect(() => {
     let cancelled = false;
 
@@ -118,8 +121,9 @@ export default function Footer() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [previewVersion]);
 
+  const text = support.footer || {};
   const email = support.email || "team@skybirdssolution.com";
   const phone = support.phone || support.mobile || "";
   const whatsapp = support.whatsapp || phone;
@@ -129,7 +133,7 @@ export default function Footer() {
     : "https://wa.me/";
 
   const configuredSocialLinks = Array.isArray(support.socialLinks)
-    ? support.socialLinks.filter((item) => item && item.url && item.url.trim())
+    ? support.socialLinks.filter((item) => item && safeWebUrl(item.url))
     : [];
 
   const socialLinks = [
@@ -156,7 +160,7 @@ export default function Footer() {
   ];
 
   return (
-    <footer className="relative overflow-hidden bg-[#10251D] text-white">
+    <footer data-edit="support.footer" className="relative overflow-hidden bg-[#10251D] text-white">
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -left-24 h-72 w-72 rounded-full bg-green-400/10 blur-3xl" />
 
@@ -184,9 +188,8 @@ export default function Footer() {
             </Link>
 
             <p className="max-w-sm text-sm leading-7 text-white/65">
-              India's marketplace learning and seller onboarding platform. Grow
-              your business across Amazon, Meesho and Flipkart with practical
-              guidance and expert support.
+              {text.description ||
+                "India's marketplace learning and seller onboarding platform. Grow your business across Amazon, Meesho and Flipkart with practical guidance and expert support."}
             </p>
 
             <div className={`mt-6 items-center gap-3 ${socialLinks.length ? "flex" : "hidden"}`}>
@@ -209,7 +212,7 @@ export default function Footer() {
           {/* Quick links */}
           <div>
             <h3 className="mb-6 text-lg font-semibold text-leaf">
-              Quick Links
+              {text.quickLinksTitle || "Quick Links"}
             </h3>
 
             <ul className="space-y-4 text-sm text-white/65">
@@ -234,7 +237,7 @@ export default function Footer() {
           {/* Legal */}
           <div>
             <h3 className="mb-6 text-lg font-semibold text-leaf">
-              Legal & Policies
+              {text.legalTitle || "Legal & Policies"}
             </h3>
 
             <ul className="space-y-4 text-sm text-white/65">
@@ -257,7 +260,7 @@ export default function Footer() {
           {/* Contact */}
           <div>
             <h3 className="mb-6 text-lg font-semibold text-leaf">
-              Get in Touch
+              {text.contactTitle || "Get in Touch"}
             </h3>
 
             <div className="space-y-5">
@@ -270,7 +273,7 @@ export default function Footer() {
                 </span>
                 <span className="min-w-0 pt-1">
                   <span className="mb-1 block text-xs text-white/45">
-                    Email us
+                    {text.emailLabel || "Email us"}
                   </span>
                   <span className="break-all text-sm text-white/80 transition group-hover:text-emerald-300">
                     {email}
@@ -288,7 +291,7 @@ export default function Footer() {
                   </span>
                   <span className="pt-1">
                     <span className="mb-1 block text-xs text-white/45">
-                      Call us
+                      {text.callLabel || "Call us"}
                     </span>
                     <span className="text-sm text-white/80 transition group-hover:text-emerald-300">
                       {phone}
@@ -308,10 +311,10 @@ export default function Footer() {
                 </span>
                 <span>
                   <span className="mb-1 block text-xs text-white/45">
-                    WhatsApp Support
+                    {text.whatsappLabel || "WhatsApp Support"}
                   </span>
                   <span className="text-sm text-white/80 transition group-hover:text-emerald-300">
-                    Chat with our team
+                    {text.whatsappText || "Chat with our team"}
                   </span>
                 </span>
               </a>
@@ -322,7 +325,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="flex flex-col gap-4 border-t border-white/10 py-6 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <p className="text-xs leading-6 text-white/45">
-            © {new Date().getFullYear()} SkyBirds solution. All rights reserved.
+            © {new Date().getFullYear()} {text.copyright || "SkyBirds solution. All rights reserved."}
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-white/45 sm:justify-end">

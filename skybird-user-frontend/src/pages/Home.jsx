@@ -20,6 +20,7 @@ import CourseCard from "../components/CourseCard";
 
 import { fetchCourses, fetchPlatforms } from "../api/courses";
 import { fetchSiteContent } from "../api/site";
+import { useSitePreviewVersion } from "../lib/sitePreview";
 
 
 import HomeVideo from "../components/HomeVideo";
@@ -209,6 +210,13 @@ export default function Home() {
 
   const [openFaq, setOpenFaq] = useState(0);
   const [siteContent, setSiteContent] = useState(null);
+  const previewVersion = useSitePreviewVersion();
+
+  // In the admin panel's preview, show each edit as it's typed.
+  useEffect(() => {
+    if (!previewVersion) return;
+    fetchSiteContent().then((res) => setSiteContent(res.data || {})).catch(() => {});
+  }, [previewVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,7 +262,11 @@ export default function Home() {
   const hero = home.hero || {};
   const sections =
     Array.isArray(home.contentSections) && home.contentSections.length
-      ? home.contentSections
+      ? home.contentSections.map((section, index) => ({
+          ...section,
+          paragraphs: Array.isArray(section.paragraphs) ? section.paragraphs : [],
+          icon: contentSections[index]?.icon || BookOpen,
+        }))
       : contentSections;
   const dynamicFaqs =
     Array.isArray(home.faqs) && home.faqs.length ? home.faqs : faqs;
@@ -265,8 +277,8 @@ export default function Home() {
       {loading && <TopLoader />}
 
 
-      <section className="hero-mesh relative isolate overflow-hidden">
-        <FloatingTags />
+      <section data-edit="home.hero" className="hero-mesh relative isolate overflow-hidden">
+        <FloatingTags labels={hero.floatingTags} />
         {/* Slowly rotating decorative rings behind the heading */}
         <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-24 -z-10 h-[620px] w-[620px] -translate-x-1/2 sm:h-[760px] sm:w-[760px]">
           <motion.div
@@ -339,7 +351,7 @@ export default function Home() {
                 to="/about"
                 className="inline-flex items-center gap-2 rounded-[10px] bg-black/[0.06] px-6 py-3.5 text-sm font-bold text-ink backdrop-blur transition-colors duration-300 hover:bg-black/[0.1]"
               >
-                <RollText>About Sky Birds Solution</RollText>
+                <RollText>{hero.secondaryLabel || "About Sky Birds Solution"}</RollText>
               </Link>
             </motion.div>
 
@@ -500,7 +512,7 @@ export default function Home() {
             >
               <img
                 decoding="async"
-                src="/assets/img1.webp"
+                src={hero.secondImageUrl || "/assets/img1.webp"}
                 alt="Learners working on e-commerce marketing together"
                 loading="lazy"
                 className="absolute inset-0 h-full w-full object-cover"
@@ -524,7 +536,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20 pb-0">
+      <section data-edit="home.featured" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20 pb-0">
         <motion.div
           initial="hidden"
           whileInView="visible"
@@ -607,7 +619,7 @@ export default function Home() {
 
       <TestimonialVideos />
 
-      <section className="bg-[#f7f9f7] py-16 lg:py-16">
+      <section data-edit="home.contentSections" className="bg-[#f7f9f7] py-16 lg:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             variants={fadeUp}
@@ -618,11 +630,11 @@ export default function Home() {
           >
 
             <h2 className="mt-3 text-3xl font-extrabold text-ink sm:text-4xl">
-              Explore Amazon &amp; E-Commerce, Step by Step
+              {home.sectionsIntro?.title || "Explore Amazon & E-Commerce, Step by Step"}
             </h2>
 
             <p className="mt-4 text-base leading-7 text-slate-700">
-              Discover the key areas covered in our practical learning programs.
+              {home.sectionsIntro?.description || "Discover the key areas covered in our practical learning programs."}
             </p>
           </motion.div>
 
@@ -940,7 +952,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
+      <section data-edit="home.learning" className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
         <motion.div
           initial={{ opacity: 0, x: -24 }}
           whileInView={{ opacity: 1, x: 0 }}
@@ -949,7 +961,7 @@ export default function Home() {
           className="overflow-hidden rounded-[50%]"
         >
           <img decoding="async"
-            src="/assets/img2.webp"
+            src={home.learning?.imageUrl || "/assets/img2.webp"}
             onError={(e) => {
               e.currentTarget.src =
                 "https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1200&q=85";
@@ -979,19 +991,16 @@ export default function Home() {
             variants={fadeUp}
             className="mt-5 text-base leading-8 text-slate-700"
           >
-            Our programs are designed to support learners at different stages of
-            their e-commerce journey, that varies from introductory concepts to
-            advanced business strategies.
+            {home.learning?.paragraph1 ||
+              "Our programs are designed to support learners at different stages of their e-commerce journey, that varies from introductory concepts to advanced business strategies."}
           </motion.p>
 
           <motion.p
             variants={fadeUp}
             className="mt-4 text-base leading-8 text-slate-700"
           >
-            We believe learning at Sky Birds Solution should be practical,
-            accessible, and emphasized on real-world skills. Our approach is
-            towards helping learners understand concepts and develop the
-            confidence to apply their knowledge.
+            {home.learning?.paragraph2 ||
+              "We believe learning at Sky Birds Solution should be practical, accessible, and emphasized on real-world skills. Our approach is towards helping learners understand concepts and develop the confidence to apply their knowledge."}
           </motion.p>
 
           <motion.div variants={fadeUp} className="mt-7">
@@ -1006,7 +1015,7 @@ export default function Home() {
         </motion.div>
       </section>
 
-      <section className="bg-[#f7f9f7] py-16 sm:py-20">
+      <section data-edit="home.faqs home.faq" className="bg-[#f7f9f7] py-16 sm:py-20">
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           <motion.div
             variants={fadeUp}
@@ -1021,8 +1030,8 @@ export default function Home() {
             </h2>
 
             <p className="mt-3 text-sm leading-6 text-slate-700">
-              Quick answers about learning Amazon selling and e-commerce with
-              Sky Birds Solution.
+              {home.faq?.description ||
+                "Quick answers about learning Amazon selling and e-commerce with Sky Birds Solution."}
             </p>
           </motion.div>
 
@@ -1083,6 +1092,7 @@ export default function Home() {
       </section>
 
       <motion.section
+        data-edit="home.cta"
         className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8"
         initial="hidden"
         whileInView="visible"
@@ -1097,7 +1107,7 @@ export default function Home() {
           >
             <img
               decoding="async"
-              src="/assets/owner1.webp"
+              src={home.cta?.imageUrl || "/assets/owner1.webp"}
               alt="Sky Birds Solution founder"
               loading="lazy"
               className="h-full w-full object-cover"

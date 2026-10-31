@@ -31,7 +31,7 @@ const ghosts = [
 // towards the cards below, so the tags look pulled into them (as on nominal.so).
 const SCROLL_RANGE = [0, 550];
 
-export default function FloatingTags() {
+export default function FloatingTags({ labels }) {
   const reduceMotion = useReducedMotion();
   const { scrollY } = useScroll();
   const scale = useTransform(scrollY, SCROLL_RANGE, [1, 0], { ease: easeIn });
@@ -47,7 +47,8 @@ export default function FloatingTags() {
         <span key={cls} className={`absolute h-4 rounded-full opacity-60 blur-[5px] ${cls}`} />
       ))}
 
-      {tags.map(({ label, icon: Icon, pos, circle, pill, size }, index) => {
+      {tags.map(({ label: defaultLabel, icon: Icon, pos, circle, pill, size }, index) => {
+        const label = labels?.[index] || defaultLabel;
         const s = sizes[size];
         return (
           <motion.div

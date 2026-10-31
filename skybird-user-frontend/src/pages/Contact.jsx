@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import API from "../api/axios";
 import { fetchSiteContent } from "../api/site";
+import { useSitePreviewVersion } from "../lib/sitePreview";
 import { AlertCircle, ArrowUpRight, Clock, Loader2, Mail, MapPin, MessageCircle, Phone, Send } from "lucide-react";
 import RollText from "../components/RollText";
 import Shine from "../components/Shine";
@@ -93,11 +94,12 @@ export default function Contact() {
     responseTime: "Typical response time: Under 4 business hours",
   });
 
+  const previewVersion = useSitePreviewVersion();
   useEffect(() => {
     fetchSiteContent().then((res) => {
       if (res.success) setSupport((prev) => ({ ...prev, ...(res.data?.support || {}) }));
     }).catch(() => {});
-  }, []);
+  }, [previewVersion]);
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -125,17 +127,19 @@ export default function Contact() {
     }
   }
 
+  const text = support.contactPage || {};
+  const topics = Array.isArray(text.topics) && text.topics.length ? text.topics : TOPICS;
   // The first number in the support phone field is used for call/WhatsApp links.
   const phoneDigits = String(support.mobile || "").split("/")[0].replace(/\D/g, "");
   const whatsappDigits = String(support.whatsapp || "").replace(/\D/g, "") || phoneDigits;
   const quickActions = [
-    { icon: Phone, label: "Call us", value: support.mobile, href: phoneDigits && `tel:+${phoneDigits}` },
-    { icon: MessageCircle, label: "WhatsApp", value: "Chat with our team", href: whatsappDigits && `https://wa.me/${whatsappDigits}`, external: true },
-    { icon: Mail, label: "Email", value: support.email, href: support.email && `mailto:${support.email}` },
+    { icon: Phone, label: text.callLabel || "Call us", value: support.mobile, href: phoneDigits && `tel:+${phoneDigits}` },
+    { icon: MessageCircle, label: text.whatsappLabel || "WhatsApp", value: text.whatsappText || "Chat with our team", href: whatsappDigits && `https://wa.me/${whatsappDigits}`, external: true },
+    { icon: Mail, label: text.emailLabel || "Email", value: support.email, href: support.email && `mailto:${support.email}` },
   ];
 
   return (
-    <section className="relative overflow-hidden">
+    <section data-edit="support.contactPage" className="relative overflow-hidden">
       <div className="pointer-events-none absolute -top-40 right-0 h-96 w-96 rounded-full bg-leaf/10 blur-3xl" />
 
       <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
@@ -208,7 +212,7 @@ export default function Contact() {
                     transition={{ duration: 0.45, delay: 1.25 }}
                     className="relative flex flex-col items-center"
                   >
-                    <h2 className="mt-6 text-2xl font-bold text-ink">Message sent</h2>
+                    <h2 className="mt-6 text-2xl font-bold text-ink">{text.successTitle || "Message sent"}</h2>
                     <p className="mt-2 max-w-sm text-sm leading-6 text-slate-600">{statusMessage}</p>
                     <button
                       type="button"
@@ -229,8 +233,8 @@ export default function Contact() {
                   className="space-y-5"
                 >
                   <div>
-                    <h2 className="text-xl font-bold text-ink">Send us a message</h2>
-                    <p className="mt-1 text-sm text-slate-500">We usually reply the same business day.</p>
+                    <h2 className="text-xl font-bold text-ink">{text.formTitle || "Send us a message"}</h2>
+                    <p className="mt-1 text-sm text-slate-500">{text.formSubtitle || "We usually reply the same business day."}</p>
                   </div>
 
                   <AnimatePresence>
@@ -250,9 +254,9 @@ export default function Contact() {
 
                   {/* Topic chips fill the subject field */}
                   <div>
-                    <p className="mb-2 text-xs font-semibold text-slate-600">What can we help with?</p>
+                    <p className="mb-2 text-xs font-semibold text-slate-600">{text.topicsLabel || "What can we help with?"}</p>
                     <div className="flex flex-wrap gap-2">
-                      {TOPICS.map((topic) => {
+                      {topics.map((topic) => {
                         const active = form.subject === topic;
                         return (
                           <button
@@ -274,15 +278,15 @@ export default function Contact() {
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Full name" name="name" value={form.name} onChange={handleChange} maxLength={120} required autoComplete="name" />
-                    <Field label="Email address" type="email" name="email" value={form.email} onChange={handleChange} maxLength={254} required autoComplete="email" />
-                    <Field label="Mobile / WhatsApp" type="tel" name="phone" value={form.phone} onChange={handleChange} maxLength={30} autoComplete="tel" />
-                    <Field label="Subject" name="subject" value={form.subject} onChange={handleChange} maxLength={200} required />
+                    <Field label={text.nameLabel || "Full name"} name="name" value={form.name} onChange={handleChange} maxLength={120} required autoComplete="name" />
+                    <Field label={text.emailFieldLabel || "Email address"} type="email" name="email" value={form.email} onChange={handleChange} maxLength={254} required autoComplete="email" />
+                    <Field label={text.phoneLabel || "Mobile / WhatsApp"} type="tel" name="phone" value={form.phone} onChange={handleChange} maxLength={30} autoComplete="tel" />
+                    <Field label={text.subjectLabel || "Subject"} name="subject" value={form.subject} onChange={handleChange} maxLength={200} required />
                   </div>
-                  <Field as="textarea" label="Your message or store details" name="message" value={form.message} onChange={handleChange} maxLength={5000} required rows={5} />
+                  <Field as="textarea" label={text.messageLabel || "Your message or store details"} name="message" value={form.message} onChange={handleChange} maxLength={5000} required rows={5} />
 
                   <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
-                    <p className="text-xs text-slate-500">Fields marked * are required.</p>
+                    <p className="text-xs text-slate-500">{text.requiredNote || "Fields marked * are required."}</p>
                     <button
                       type="submit"
                       disabled={status === "loading"}
@@ -296,7 +300,7 @@ export default function Contact() {
                         </>
                       ) : (
                         <>
-                          <RollText>Send message</RollText>
+                          <RollText>{text.submitLabel || "Send message"}</RollText>
                           <Send className="h-4 w-4" />
                         </>
                       )}
@@ -314,9 +318,9 @@ export default function Contact() {
           >
             <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-leaf/20 blur-3xl" />
             <div className="relative p-7 sm:p-8">
-              <h2 className="text-xl font-bold">Visit our office</h2>
+              <h2 className="text-xl font-bold">{text.officeTitle || "Visit our office"}</h2>
               <p className="mt-2 text-sm leading-6 text-white/65">
-                Talk with an e-commerce growth manager who understands Amazon India, Meesho, and Flipkart seller challenges.
+                {text.officeText || "Talk with an e-commerce growth manager who understands Amazon India, Meesho, and Flipkart seller challenges."}
               </p>
               <div className="mt-6 flex items-start gap-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-leaf">

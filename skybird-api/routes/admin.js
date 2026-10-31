@@ -47,6 +47,14 @@ const {
 } = require("../controllers/moduleController");
 const rateLimit = require("../middleware/rateLimit");
 const { getContentAdmin, createContent, updateContent, deleteContent } = require("../controllers/learningContentController");
+const {
+  getEditorContent,
+  saveDraft,
+  discardDraft,
+  publishDraft,
+  getVersions,
+  restoreVersion,
+} = require("../controllers/siteController");
 const { getAdminSiteContent, updateSiteContent } = require("../controllers/siteController");
 const {
   getAdminTestimonials,
@@ -87,6 +95,12 @@ router.post("/notifications/read-all", async (req, res) => {
 
 router.get("/site-content", getAdminSiteContent);
 router.put("/site-content", updateSiteContent);
+router.get("/site-content/editor", getEditorContent);
+router.put("/site-content/draft", saveDraft);
+router.delete("/site-content/draft", discardDraft);
+router.post("/site-content/publish", publishDraft);
+router.get("/site-content/versions", getVersions);
+router.post("/site-content/versions/:id/restore", restoreVersion);
 
 router.get("/testimonials", getAdminTestimonials);
 router.post("/testimonials", upload.single("video"), createTestimonial);

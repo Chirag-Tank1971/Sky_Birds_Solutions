@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
+import { fetchSiteContent, safeWebUrl } from "../api/site";
+import { useSitePreviewVersion } from "../lib/sitePreview";
 
 /**
  * Floating WhatsApp + Telegram contact shortcuts.
@@ -22,10 +25,27 @@ export const TelegramIcon = () => (
 );
 
 export default function FloatingContactButtons() {
+  const [support, setSupport] = useState({});
+  const previewVersion = useSitePreviewVersion();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSiteContent()
+      .then((res) => {
+        if (!cancelled && res?.success) setSupport(res.data?.support || {});
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [previewVersion]);
+
+  const whatsappDigits = String(support.whatsapp || support.mobile || "").split("/")[0].replace(/\D/g, "");
+
   return (
     <div className="fixed bottom-5 right-6 z-[45] flex flex-row items-center gap-2 sm:bottom-7 sm:right-6">
       <motion.a
-        href="https://t.me/sbsecomlearninghub"
+        href={safeWebUrl(support.telegramUrl) || "https://t.me/sbsecomlearninghub"}
         target={TELEGRAM_USERNAME ? "_blank" : undefined}
         rel={TELEGRAM_USERNAME ? "noreferrer" : undefined}
         aria-label="Contact us on Telegram"
@@ -44,7 +64,7 @@ export default function FloatingContactButtons() {
       </motion.a>
 
       <motion.a
-        href="https://wa.me/+917041492302"
+        href={`https://wa.me/${whatsappDigits || "917041492302"}`}
         target={WHATSAPP_NUMBER ? "_blank" : undefined}
         rel={WHATSAPP_NUMBER ? "noreferrer" : undefined}
         aria-label="Contact us on WhatsApp"

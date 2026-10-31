@@ -13,6 +13,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { fetchSiteContent } from "../api/site";
+import { useSitePreviewVersion } from "../lib/sitePreview";
 import RollText from "../components/RollText";
 
 const defaultStats = [
@@ -134,6 +135,7 @@ const defaultAbout = {
 
 export default function About() {
   const [siteContent, setSiteContent] = useState(null);
+  const previewVersion = useSitePreviewVersion();
 
   useEffect(() => {
     let cancelled = false;
@@ -146,9 +148,11 @@ export default function About() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [previewVersion]);
 
   const content = siteContent?.about || {};
+  const trainer = content.trainer || {};
+  const promisesIntro = content.promisesIntro || {};
   const about = {
     ...defaultAbout,
     ...content,
@@ -189,7 +193,7 @@ export default function About() {
   return (
     <main className="mx-auto max-w-7xl space-y-20 px-2 py-12 sm:px-6 sm:py-16 lg:px-8">
       {/* About Trainer */}
-      <section aria-labelledby="about-trainer-heading">
+      <section data-edit="about.trainer" aria-labelledby="about-trainer-heading">
         <div className="overflow-hidden rounded-[2rem] border border-forest/10 bg-gradient-to-br from-white via-mint/20 to-leaf/10 shadow-sm">
           <div className="grid items-center gap-8 p-2 sm:gap-10 sm:p-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14 lg:p-12">
             <div className="order-2 min-w-0 lg:order-1">
@@ -198,16 +202,12 @@ export default function About() {
                 className="mt-4 text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl lg:text-5xl"
               >
                 <span className="mt-1 block text-forest">
-                  From a Beginner to Building Brands
+                  {trainer.title || "From a Beginner to Building Brands"}
                 </span>
               </h2>
               <p className="mt-5 text-sm leading-7 text-gray-600 sm:text-base sm:leading-8">
-                In 2019, I began as a digital marketing intern, working 12-hour
-                days for ₹1,500 a month. In 2022, my first attempt at selling on
-                Amazon ended in a ₹18,000 loss and a difficult pause. I started
-                again in 2024, bringing those lessons into agency work,
-                researching marketplaces, and helping solve real challenges for
-                sellers.
+                {trainer.description ||
+                  "In 2019, I began as a digital marketing intern, working 12-hour days for ₹1,500 a month. In 2022, my first attempt at selling on Amazon ended in a ₹18,000 loss and a difficult pause. I started again in 2024, bringing those lessons into agency work, researching marketplaces, and helping solve real challenges for sellers."}
               </p>
               {/* <p className="mt-4 text-sm leading-7 text-gray-600 sm:text-base sm:leading-8">
                 The focus is on making complex processes easier to understand,
@@ -221,11 +221,10 @@ export default function About() {
                   </span>
                   <div>
                     <h3 className="text-sm font-bold text-gray-900">
-                      Learn From My Journey
+                      {trainer.pointOneTitle || "Learn From My Journey"}
                     </h3>
                     <p className="mt-1 text-xs leading-5 text-gray-600">
-                      Learn from the mistakes, research, and experience that
-                      shaped my approach.
+                      {trainer.pointOneText || "Learn from the mistakes, research, and experience that shaped my approach."}
                     </p>
                   </div>
                 </div>
@@ -235,11 +234,10 @@ export default function About() {
                   </span>
                   <div>
                     <h3 className="text-sm font-bold text-gray-900">
-                      Built Around Real Challenges
+                      {trainer.pointTwoTitle || "Built Around Real Challenges"}
                     </h3>
                     <p className="mt-1 text-xs leading-5 text-gray-600">
-                      Understand the decisions sellers face while building an
-                      online business.
+                      {trainer.pointTwoText || "Understand the decisions sellers face while building an online business."}
                     </p>
                   </div>
                 </div>
@@ -249,7 +247,7 @@ export default function About() {
                   to="/courses"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-leaf px-6 py-3.5 text-sm font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-forest sm:w-auto"
                 >
-                  <RollText>Explore the Course</RollText> <ArrowRight className="h-4 w-4" />
+                  <RollText>{trainer.buttonLabel || "Explore the Course"}</RollText> <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>
@@ -259,8 +257,8 @@ export default function About() {
                 <div className="absolute -inset-3 rounded-[2rem] bg-leaf/15 blur-xl" />
                 <div className="relative overflow-hidden rounded-[1.75rem] border border-white bg-white p-2 shadow-xl">
                   <img decoding="async"
-                    src="/assets/owner1.webp"
-                    alt="Sambhav Sir, e-commerce course trainer"
+                    src={trainer.imageUrl || "/assets/owner1.webp"}
+                    alt={`${trainer.name || "Sambhav Sir"}, e-commerce course trainer`}
                     className="aspect-[4/5] w-full rounded-[1.25rem] object-cover object-center"
                     loading="lazy"
                     onError={(event) => {
@@ -273,21 +271,21 @@ export default function About() {
                     <span className="grid h-28 w-28 place-items-center rounded-full border border-white/30 bg-white/10 text-4xl font-extrabold">
                       SS
                     </span>
-                    <span className="mt-5 text-xl font-bold">Sambhav Sir</span>
+                    <span className="mt-5 text-xl font-bold">{trainer.name || "Sambhav Sir"}</span>
                     <span className="mt-1 text-sm text-white/75">
-                      E-Commerce Trainer
+                      {trainer.role || "E-Commerce Trainer"}
                     </span>
                   </div>
                   <div className="absolute inset-x-2 bottom-2 rounded-b-[1.2rem] bg-gradient-to-t from-gray-950/90 via-gray-950/45 to-transparent px-5 pb-5 pt-12 text-white">
-                    <p className="text-lg font-bold">Sambhav Sir</p>
+                    <p className="text-lg font-bold">{trainer.name || "Sambhav Sir"}</p>
                     <p className="mt-1 text-xs font-medium text-white/80">
-                      E-Commerce Trainer
+                      {trainer.role || "E-Commerce Trainer"}
                     </p>
                   </div>
                 </div>
                 <div className="absolute -right-2 top-5 rounded-2xl border border-white/70 bg-white/95 px-4 py-3 shadow-lg sm:-right-5">
                   <p className="text-xs font-bold text-forest">
-                    Learn • Apply • Grow
+                    {trainer.tagline || "Learn • Apply • Grow"}
                   </p>
                 </div>
               </div>
@@ -296,7 +294,7 @@ export default function About() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden rounded-[2rem] border border-forest/10 bg-gradient-to-br from-white via-mint/30 to-leaf/10 px-2 py-12 sm:px-10 sm:py-16 lg:px-14">
+      <section data-edit="about.hero about.promisesIntro about.promises" className="relative overflow-hidden rounded-[2rem] border border-forest/10 bg-gradient-to-br from-white via-mint/30 to-leaf/10 px-2 py-12 sm:px-10 sm:py-16 lg:px-14">
         <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-leaf/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-mint/60 blur-3xl" />
 
@@ -331,11 +329,11 @@ export default function About() {
             <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-forest/10 pt-6">
               <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <CheckCircle className="h-4 w-4 text-leaf" />
-                Practical Learning
+                {about.hero.trustOne || "Practical Learning"}
               </div>
               <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                 <CheckCircle className="h-4 w-4 text-leaf" />
-                Expert Support
+                {about.hero.trustTwo || "Expert Support"}
               </div>
             </div>
           </div>
@@ -346,9 +344,9 @@ export default function About() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="mt-3 text-2xl font-bold sm:text-3xl">
-                    Real Lessons.
+                    {promisesIntro.title || "Real Lessons."}
                     <span className="block text-leaf">
-                      Practical Direction.
+                      {promisesIntro.highlight || "Practical Direction."}
                     </span>
                   </h2>
                 </div>
@@ -357,9 +355,8 @@ export default function About() {
                 </div>
               </div>
               <p className="mt-4 text-sm leading-7 text-white/75">
-                This course brings together practical insights from seller
-                experience, agency work, marketplace research, and challenges
-                encountered while working with hundreds of clients.
+                {promisesIntro.description ||
+                  "This course brings together practical insights from seller experience, agency work, marketplace research, and challenges encountered while working with hundreds of clients."}
               </p>
               <div className="mt-7 space-y-3">
                 {promises.map((item) => {
@@ -389,7 +386,7 @@ export default function About() {
         </div>
       </section>
 
-      <section>
+      <section data-edit="about.who about.vision about.mission">
         <div className="grid gap-8 lg:grid-cols-2 lg:gap-16">
           <div>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
@@ -427,7 +424,7 @@ export default function About() {
         </div>
       </section>
 
-      <section>
+      <section data-edit="about.services about.servicesList">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
@@ -468,7 +465,7 @@ export default function About() {
 
 
 
-      <section>
+      <section data-edit="about.impact about.stats">
         <div className="overflow-hidden rounded-[2rem] bg-forest p-7 text-white shadow-xl sm:p-10 lg:p-12">
           <div>
             <div className="max-w-2xl">
@@ -505,7 +502,7 @@ export default function About() {
         </div>
       </section>
 
-      <section className="pb-4">
+      <section data-edit="about.cta" className="pb-4">
         <div className="rounded-3xl border border-leaf/20 bg-mint/30 px-6 py-10 text-center sm:px-10 sm:py-14">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white text-forest shadow-sm">
             <ShoppingBag className="h-7 w-7" />
