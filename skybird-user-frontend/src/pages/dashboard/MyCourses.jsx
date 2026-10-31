@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { ArrowRight, BookOpen, Compass, PlayCircle, Search, ShieldCheck } from "lucide-react";
 import CourseCard from "../../components/CourseCard";
 import RollText from "../../components/RollText";
+import WatchHistoryList from "../../components/WatchHistoryList";
+import { getWatchHistory } from "../../api/auth";
 import { useUser } from "../../context/UserContext";
 
 export default function MyCourses() {
@@ -10,6 +12,21 @@ export default function MyCourses() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [platform, setPlatform] = useState("all");
+  const [recent, setRecent] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWatchHistory()
+      .then((res) => {
+        if (!cancelled) setRecent((res.data || []).filter((item) => !item.locked).slice(0, 3));
+      })
+      .catch(() => {
+        // Optional section: the courses below still work without it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const retry = async () => {
     setLoading(true);
@@ -78,6 +95,21 @@ export default function MyCourses() {
           </div>
         ))}
       </div>
+
+      {recent.length > 0 ? (
+        <section className="mt-6 rounded-3xl border border-forest/10 bg-white p-5 shadow-[0_24px_50px_-35px_rgba(16,37,29,0.35)] sm:p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-ink">Continue watching</h2>
+              <p className="mt-0.5 text-sm text-ink/55">Pick up right where you stopped.</p>
+            </div>
+            <Link to="/dashboard/history" className="inline-flex items-center gap-1 text-sm font-semibold text-forest hover:text-leaf">
+              View all history <ArrowRight size={15} />
+            </Link>
+          </div>
+          <WatchHistoryList items={recent} />
+        </section>
+      ) : null}
 
       <section className="mt-6 rounded-3xl border border-forest/10 bg-white p-5 shadow-[0_24px_50px_-35px_rgba(16,37,29,0.35)] sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
