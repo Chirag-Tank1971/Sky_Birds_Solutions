@@ -14,8 +14,10 @@ const app = require("./app");
 const { startVideoWorker } = require("./services/videoService");
 const { startReservationSweeper } = require("./services/purchaseService");
 const { startVideoStateSweeper } = require("./services/videoState");
+const { syncPlaybackIndexes } = require("./services/playbackSessions");
 
 connectDB();
+syncPlaybackIndexes().catch((error) => console.error("Playback index update failed:", error.message));
 startVideoWorker();
 startReservationSweeper();
 startVideoStateSweeper();

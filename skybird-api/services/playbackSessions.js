@@ -91,4 +91,11 @@ async function recordPlayback({ userId, courseId, lessonId, code, userAgent }) {
   }
 }
 
-module.exports = { claim, touch, end, revokeAll, listActive, recordPlayback, maxDevices };
+// Makes the database's indexes match these models, removing any left by earlier versions
+// (an old unique "user + slot" index refused every second device). Safe to run on every start.
+async function syncPlaybackIndexes() {
+  const dropped = [...(await PlaybackSession.syncIndexes()), ...(await PlaybackEvent.syncIndexes())];
+  if (dropped.length) console.log(`Playback indexes updated; removed old: ${dropped.join(", ")}`);
+}
+
+module.exports = { claim, touch, end, revokeAll, listActive, recordPlayback, maxDevices, syncPlaybackIndexes };

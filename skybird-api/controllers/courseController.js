@@ -157,6 +157,7 @@ exports.createPlaybackAuthorization = async (req, res) => {
       ...session,
     });
   } catch (error) {
+    console.error("Playback authorization failed:", error.message);
     return res.status(500).json({ success: false, message: "Failed to authorize playback" });
   }
 };
