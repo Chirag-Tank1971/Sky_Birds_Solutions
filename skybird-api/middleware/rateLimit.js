@@ -1,5 +1,23 @@
+const jwt = require("jsonwebtoken");
+
 function clientKey(req) {
   return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+// Signed-in visitors get their own counter, so students sharing college or mobile network IPs don't
+// block each other. The token is verified, not just read, so a forged ID can't spread one person's
+// requests across many counters; anything else falls back to the IP address.
+function userOrIpKey(req) {
+  const header = req.headers?.authorization || "";
+  if (header.startsWith("Bearer ")) {
+    try {
+      const { id } = jwt.verify(header.slice(7), process.env.JWT_SECRET, { issuer: "skybirds-api", audience: "skybirds-client" });
+      if (id) return `user:${id}`;
+    } catch {
+      // Invalid or expired: counted by IP like any anonymous request.
+    }
+  }
+  return clientKey(req);
 }
 
 // Each limiter keeps its own counters, keyed by client (IP by default) rather
@@ -32,3 +50,4 @@ function rateLimit({ windowMs = 15 * 60 * 1000, max = 100, message = "Too many r
 }
 
 module.exports = rateLimit;
+module.exports.userOrIpKey = userOrIpKey;

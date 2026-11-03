@@ -3,7 +3,8 @@ import Hls from "hls.js";
 import playerjs from "player.js";
 import { useUser } from "../context/UserContext";
 import API from "../api/axios";
-import { ShieldAlert, Maximize, Minimize } from "lucide-react";
+import { ShieldAlert, Maximize, Minimize, MonitorSmartphone } from "lucide-react";
+import { getPlaybackSessionId, setPlaybackSessionId } from "../lib/playbackSession";
 
 // Same API address as the rest of the site (including its production fallback).
 const API_BASE = API.defaults.baseURL.replace(/\/+$/, "");
@@ -11,6 +12,10 @@ const API_ORIGIN = API_BASE.replace(/\/api$/, "");
 // Give up after this many back-to-back failed refreshes.
 const MAX_REFRESH_ATTEMPTS = 3;
 const PROGRESS_SAVE_MS = 15000;
+// Fetching a fresh link after a player error: at most this often, and this many times per lesson.
+const RECOVER_GAP_MS = 30000;
+const MAX_RECOVERIES = 3;
+const SESSION_ENDED_MESSAGE = "Playback stopped because this account started playing on another device.";
 
 // startAt: second to resume from. onProgress(seconds, duration, completed) runs each time progress is saved.
 const WATERMARK_MOVE_MS = 6000;
@@ -21,8 +26,21 @@ const nextWatermarkSpot = () => ({
   time: new Date().toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }),
 });
 
-// Moves around so it can't be cropped out of a recording, and identifies the buyer if one leaks.
-function FloatingWatermark({ user }) {
+// Enough to identify the buyer from a leak, without showing their full contact details on screen.
+const maskContact = (user) => {
+  if (user?.mobile) {
+    const digits = String(user.mobile);
+    return `${digits.slice(0, 2)}****${digits.slice(-3)}`;
+  }
+  if (user?.email) {
+    const [name, domain] = String(user.email).split("@");
+    return `${name.slice(0, 2)}***@${domain || ""}`;
+  }
+  return "SkyBirds Learner";
+};
+
+// Moves around so it can't be cropped out of a recording. The code links a leak to this account and device.
+function FloatingWatermark({ user, code }) {
   const [spot, setSpot] = useState(nextWatermarkSpot);
 
   useEffect(() => {
@@ -30,8 +48,8 @@ function FloatingWatermark({ user }) {
     return () => clearInterval(timer);
   }, []);
 
-  const contact = user?.mobile ? `+91 ${user.mobile}` : user?.email || "SkyBirds Learner";
-  const id = user?.id ? ` · ID ${String(user.id).slice(-6)}` : "";
+  const firstName = String(user?.name || "").trim().split(/\s+/)[0];
+  const parts = [firstName, maskContact(user), code ? `SB-${code}` : user?.id ? `ID ${String(user.id).slice(-6)}` : ""].filter(Boolean);
 
   return (
     <p
@@ -39,7 +57,7 @@ function FloatingWatermark({ user }) {
       style={{ left: `${spot.x}%`, top: `${spot.y}%`, transform: `translate(-${spot.x}%, -${spot.y}%)` }}
       className="absolute max-w-full truncate rounded bg-black/25 px-1.5 py-0.5 text-[8px] font-semibold text-white/60 transition-all duration-1000 motion-reduce:transition-none sm:text-[10px]"
     >
-      {contact}{id} · {spot.time}
+      {parts.join(" · ")} · {spot.time}
     </p>
   );
 }
@@ -59,6 +77,11 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
   const startAtRef = useRef(startAt);
   const onProgressRef = useRef(onProgress);
   const trackerRef = useRef(null);
+  const [watermarkCode, setWatermarkCode] = useState("");
+  // Set when this device must stop: replaced by another device, stopped by an admin, or logged out.
+  const [stopped, setStopped] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const recoveriesRef = useRef({ count: 0, at: 0 });
 
   useEffect(() => {
     onProgressRef.current = onProgress;
@@ -81,16 +104,25 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
         method: "PUT",
         // keepalive lets the last save finish while the tab closes.
         keepalive: true,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ...(getPlaybackSessionId() ? { "X-Playback-Session": getPlaybackSessionId() } : {}),
+        },
         body: JSON.stringify({ position: latest.seconds, duration: latest.duration, completed }),
-      }).catch(() => {});
+      })
+        .then((response) => {
+          if (response.status === 409) setStopped(SESSION_ENDED_MESSAGE);
+          else if (response.status === 401) setStopped("Please log in again to continue.");
+        })
+        .catch(() => {});
     };
     const tick = (seconds, duration) => {
       if (!(seconds > 0)) return;
       latest = { seconds: Math.floor(seconds), duration: Number.isFinite(duration) ? Math.floor(duration) : 0 };
       if (Date.now() - sentAt >= PROGRESS_SAVE_MS) send();
     };
-    trackerRef.current = { tick, send };
+    trackerRef.current = { tick, send, seconds: () => latest?.seconds || 0 };
 
     const onTime = () => tick(video.currentTime, video.duration);
     const onPause = () => send();
@@ -126,8 +158,28 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
       });
       player.on("pause", () => trackerRef.current?.send());
       player.on("ended", () => trackerRef.current?.send(true));
+      player.on("error", () => {
+        const recoveries = recoveriesRef.current;
+        if (recoveries.count >= MAX_RECOVERIES || Date.now() - recoveries.at < RECOVER_GAP_MS) return;
+        recoveriesRef.current = { count: recoveries.count + 1, at: Date.now() };
+        startAtRef.current = trackerRef.current?.seconds() || startAtRef.current;
+        setReloadKey((key) => key + 1);
+      });
     });
   }, [embedUrl]);
+
+  // A stopped device stops playing straight away, whatever the player was doing.
+  useEffect(() => {
+    if (!stopped) return;
+    videoRef.current?.pause();
+    hlsRef.current?.stopLoad();
+  }, [stopped]);
+
+  const playHere = () => {
+    startAtRef.current = trackerRef.current?.seconds() || startAtRef.current;
+    setStopped("");
+    setReloadKey((key) => key + 1);
+  };
 
   useEffect(() => {
     let active = true;
@@ -150,6 +202,8 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
         setStreamError("You do not own this course.");
       else if (error.status === 404)
         setStreamError("This lesson is not available.");
+      else if (error instanceof TypeError)
+        setStreamError("Connection problem. Check your internet and try again.");
       else
         setStreamError(error.message || "Unable to start secure playback.");
     };
@@ -159,7 +213,10 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
         `${API_BASE}/courses/${encodeURIComponent(courseId)}/videos/${encodeURIComponent(videoId)}/playback`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(getPlaybackSessionId() ? { "X-Playback-Session": getPlaybackSessionId() } : {}),
+          },
           cache: "no-store",
         },
       );
@@ -169,6 +226,8 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
         error.status = response.status;
         throw error;
       }
+      setPlaybackSessionId(data.session);
+      if (active) setWatermarkCode(data.watermarkCode || "");
       currentToken = data.token;
       return data;
     }
@@ -333,7 +392,7 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
         video.load();
       }
     };
-  }, [courseId, videoId, token]);
+  }, [courseId, videoId, token, reloadKey]);
 
   useEffect(() => {
     const blockContextMenu = (event) => {
@@ -402,7 +461,7 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
         onDragStart={(e) => e.preventDefault()}
         style={{ backgroundColor: "#000" }}
       >
-        {embedUrl && (
+        {embedUrl && !stopped && (
           <iframe
             ref={iframeRef}
             src={embedUrl}
@@ -441,12 +500,24 @@ export default function ProtectedVideo({ title, courseId, videoId, startAt = 0, 
           </div>
         )}
 
+        {stopped && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-black/90 px-6 text-center text-white" role="alert">
+            <MonitorSmartphone className="h-8 w-8 text-white/70" />
+            <p className="max-w-md text-sm font-semibold">{stopped}</p>
+            {stopped === SESSION_ENDED_MESSAGE ? (
+              <button type="button" onClick={playHere} className="rounded-full bg-white px-5 py-2 text-sm font-bold text-black transition hover:bg-white/90">
+                Play on this device
+              </button>
+            ) : null}
+          </div>
+        )}
+
         {/* Watermark stays inside the fullscreen element */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden select-none">
-          <FloatingWatermark user={user} />
+          <FloatingWatermark user={user} code={watermarkCode} />
         </div>
 
-        {!loadingStream && !streamError && (
+        {!loadingStream && !streamError && !stopped && (
           <button
             type="button"
             onClick={toggleFullscreen}

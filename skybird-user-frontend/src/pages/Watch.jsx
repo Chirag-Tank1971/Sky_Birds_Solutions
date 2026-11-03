@@ -198,7 +198,8 @@ export default function Watch() {
   }
 
   const title = selectedVideo?.title || course.title
-  const secureVideoId = selectedVideo?.videoId || ""
+  // The API sends hasVideo instead of the video's ID; older API versions still send videoId.
+  const secureVideoId = Boolean(selectedVideo?.hasVideo || selectedVideo?.videoId)
   const overallPercent = playableCount ? Math.round((completedCount / playableCount) * 100) : 0
 
   const playable = orderedLessons.filter((v) => !v.upcoming)

@@ -10,6 +10,8 @@ const bunnyStream = require("../services/bunnyStream");
 const { isConfigured, uploadStream } = require("../config/cloudinary");
 const { processVideo, enqueueVideo, getVideoStatus, deleteVideoFiles, cleanupTempFile, validateVideoId } = require("../services/videoService");
 const { rejectOversizedThumbnail } = require("../middleware/upload");
+const playbackSessions = require("../services/playbackSessions");
+const PlaybackEvent = require("../models/PlaybackEvent");
 const { CourseEditError, findCourse, editCourse, sendEditError, recordAudit } = require("../services/courseEditing");
 const { hasPlayableLesson, moduleOf } = require("../services/courseContent");
 const { checkVideo, goLiveProblem } = require("../services/videoReadiness");
@@ -837,6 +839,61 @@ exports.updateCustomer = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+// @desc    Devices currently allowed to stream this customer's courses
+exports.getCustomerPlaybackSessions = async (req, res) => {
+  try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ success: false, message: "Customer not found" });
+    return res.status(200).json({ success: true, data: await playbackSessions.listActive(req.params.id) });
+  } catch (error) {
+    console.error("Load playback sessions failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to load playback devices" });
+  }
+};
+
+// @desc    Stop video playback on all of this customer's devices. Their website login stays.
+exports.revokeCustomerPlaybackSessions = async (req, res) => {
+  try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ success: false, message: "Customer not found" });
+    const stopped = await playbackSessions.revokeAll(req.params.id);
+    return res.status(200).json({ success: true, message: stopped ? `Playback stopped on ${stopped} ${stopped === 1 ? "device" : "devices"}` : "No active devices", stopped });
+  } catch (error) {
+    console.error("Revoke playback sessions failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to stop playback" });
+  }
+};
+
+// @desc    Find who watched with a watermark code, from a leaked screenshot or recording
+exports.tracePlaybackCode = async (req, res) => {
+  try {
+    const code = String(req.params.code || "").trim().toUpperCase();
+    if (!/^[A-Z2-9]{6}$/.test(code)) return res.status(400).json({ success: false, message: "Enter the 6-character code from the video" });
+    const events = await PlaybackEvent.find({ code })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .populate("user", "name mobile email pastMobile pastEmail isBlocked deletedAt")
+      .populate("course", "title")
+      .lean();
+    const data = events.map((event) => ({
+      watchedAt: event.createdAt,
+      course: event.course?.title || "",
+      lessonId: event.lessonId,
+      device: event.userAgent,
+      customer: event.user && {
+        _id: event.user._id,
+        name: event.user.name || "",
+        mobile: event.user.mobile || event.user.pastMobile || "",
+        email: event.user.email || event.user.pastEmail || "",
+        isBlocked: Boolean(event.user.isBlocked),
+        deleted: Boolean(event.user.deletedAt),
+      },
+    }));
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Trace watermark code failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to look up this code" });
   }
 };
 

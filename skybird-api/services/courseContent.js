@@ -18,7 +18,8 @@ const publicVideos = (course) =>
       id: lesson.id,
       title: lesson.title,
       duration: lesson.duration || "",
-      videoId: locked ? "" : lesson.videoId || "",
+      // The Bunny ID stays on the server: the player gets a signed link only after the purchase check.
+      hasVideo: !locked && Boolean(lesson.videoId),
       upcoming: locked,
       provider: lesson.provider || "local",
       moduleId: moduleOf(course, lesson)?.id || "",

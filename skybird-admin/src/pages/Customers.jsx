@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import API from '../api/axios';
 import toast from 'react-hot-toast';
-import { Search, Ban, CheckCircle, Trash2, Eye, X } from 'lucide-react';
+import { Search, Ban, CheckCircle, Trash2, Eye, X, Fingerprint, MonitorSmartphone, Loader2 } from 'lucide-react';
+
+// "Chrome on Windows" from a browser's user agent; enough to tell a customer's devices apart.
+const deviceName = (userAgent = '') => {
+  const browser = /Edg\//.test(userAgent) ? 'Edge' : /OPR\//.test(userAgent) ? 'Opera' : /Chrome\//.test(userAgent) ? 'Chrome'
+    : /Firefox\//.test(userAgent) ? 'Firefox' : /Safari\//.test(userAgent) ? 'Safari' : 'Browser';
+  const system = /Android/.test(userAgent) ? 'Android' : /iPhone|iPad/.test(userAgent) ? 'iPhone/iPad' : /Windows/.test(userAgent) ? 'Windows'
+    : /Mac OS/.test(userAgent) ? 'Mac' : /Linux/.test(userAgent) ? 'Linux' : 'unknown device';
+  return `${browser} on ${system}`;
+};
 
 // Deleted customers are kept as past users; their old mobile/email live in pastMobile/pastEmail.
 const isPast = (c) => Boolean(c.deletedAt);
@@ -19,6 +28,52 @@ const Customers = () => {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [devices, setDevices] = useState(null);
+  const [stopping, setStopping] = useState(false);
+  const [traceCode, setTraceCode] = useState('');
+  const [tracing, setTracing] = useState(false);
+  const [traceResults, setTraceResults] = useState(null);
+
+  // Devices currently allowed to stream the open customer's courses.
+  useEffect(() => {
+    if (!selected || selected.deletedAt) return undefined;
+    let cancelled = false;
+    setDevices(null);
+    API.get(`/admin/customers/${selected._id}/playback-sessions`)
+      .then(({ data }) => { if (!cancelled) setDevices(data.data || []); })
+      .catch(() => { if (!cancelled) setDevices([]); });
+    return () => { cancelled = true; };
+  }, [selected]);
+
+  const stopPlayback = async () => {
+    if (!window.confirm('Stop video playback on all of this customer\'s devices? They stay logged in to the website and can press play again.')) return;
+    setStopping(true);
+    try {
+      const { data } = await API.delete(`/admin/customers/${selected._id}/playback-sessions`);
+      toast.success(data.message || 'Playback stopped');
+      setDevices([]);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not stop playback');
+    } finally {
+      setStopping(false);
+    }
+  };
+
+  const trace = async (event) => {
+    event.preventDefault();
+    const code = traceCode.trim().replace(/^SB-/i, '');
+    if (!code) return;
+    setTracing(true);
+    try {
+      const { data } = await API.get(`/admin/playback-codes/${encodeURIComponent(code)}`);
+      setTraceResults(data.data || []);
+    } catch (err) {
+      setTraceResults(null);
+      toast.error(err.response?.data?.message || 'Could not look up this code');
+    } finally {
+      setTracing(false);
+    }
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -89,6 +144,57 @@ const Customers = () => {
           {activeCount} active {activeCount === 1 ? 'customer' : 'customers'}
           {pastCount > 0 && ` · ${pastCount} past ${pastCount === 1 ? 'user' : 'users'}`}
         </p>
+      </div>
+
+      {/* Find who watched, from the code in a leaked screenshot or recording */}
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+        <form onSubmit={trace} className="flex flex-wrap items-end gap-3">
+          <label className="min-w-[14rem] flex-1">
+            <span className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+              <Fingerprint className="h-4 w-4 text-primary-600" /> Trace a watermark code
+            </span>
+            <span className="mb-2 block text-xs text-gray-500">Every lesson shows a code like SB-7K3QX2. Enter it from a leaked screenshot or recording to see who watched.</span>
+            <input
+              value={traceCode}
+              onChange={(e) => setTraceCode(e.target.value)}
+              placeholder="SB-7K3QX2"
+              maxLength={12}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm uppercase outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </label>
+          <button type="submit" disabled={tracing || !traceCode.trim()} className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            {tracing && <Loader2 className="h-4 w-4 animate-spin" />} Find
+          </button>
+        </form>
+        {traceResults && (
+          <div className="mt-4 border-t border-gray-100 pt-3">
+            {traceResults.length === 0 ? (
+              <p className="text-sm text-gray-500">No playback found for this code in the last 90 days.</p>
+            ) : (
+              <ul className="space-y-2">
+                {traceResults.map((result, index) => (
+                  <li key={index} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-gray-50 p-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900">
+                        {result.customer?.name || 'Unnamed customer'}
+                        {result.customer?.deleted ? ' (past user)' : result.customer?.isBlocked ? ' (blocked)' : ''}
+                      </p>
+                      <p className="text-xs text-gray-600">{[result.customer?.mobile, result.customer?.email].filter(Boolean).join(' · ')}</p>
+                      <p className="text-xs text-gray-500">
+                        {result.course} · {new Date(result.watchedAt).toLocaleString('en-IN')} · {deviceName(result.device)}
+                      </p>
+                    </div>
+                    {result.customer && customers.some((c) => c._id === result.customer._id) && (
+                      <button type="button" onClick={() => setSelected(customers.find((c) => c._id === result.customer._id))} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-white">
+                        Open customer
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -275,6 +381,38 @@ const Customers = () => {
                   <p className="text-sm text-gray-400">No purchases yet</p>
                 )}
               </div>
+
+              {!isPast(selected) && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-500 uppercase">Video playback devices</p>
+                    {devices?.length > 0 && (
+                      <button type="button" onClick={stopPlayback} disabled={stopping} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+                        {stopping && <Loader2 className="h-3 w-3 animate-spin" />} Stop playback
+                      </button>
+                    )}
+                  </div>
+                  {devices === null ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  ) : devices.length === 0 ? (
+                    <p className="text-sm text-gray-400">Not watching on any device</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {devices.map((device) => (
+                        <div key={device.code} className="flex items-start gap-3 rounded-lg bg-gray-50 p-3">
+                          <MonitorSmartphone className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
+                          <div className="min-w-0 text-sm">
+                            <p className="font-medium">{deviceName(device.userAgent)} <span className="font-mono text-xs text-gray-500">SB-{device.code}</span></p>
+                            <p className="text-xs text-gray-500">
+                              {device.course?.title ? `${device.course.title} · ` : ''}last active {new Date(device.lastSeenAt).toLocaleString('en-IN')}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -41,7 +41,7 @@ app.use(
       return callback(new Error("CORS origin not allowed"));
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Playback-Session"],
     maxAge: 600,
   }),
 );
@@ -59,6 +59,16 @@ app.use(
     windowMs: 15 * 60 * 1000,
     max: 300,
     message: "Too many API requests. Please try again later.",
+    keyGenerator: rateLimit.userOrIpKey,
+  }),
+);
+app.use(
+  /^\/api\/courses\/[^/]+\/videos\/[^/]+\/playback$/,
+  rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 40,
+    message: "Too many video requests. Please wait a few minutes and try again.",
+    keyGenerator: rateLimit.userOrIpKey,
   }),
 );
 app.use(

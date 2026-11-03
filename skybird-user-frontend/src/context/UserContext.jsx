@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react"
+import { endPlaybackSession } from "../lib/playbackSession"
 import {
   sendOtp as apiSendOtp,
   verifyOtp as apiVerifyOtp,
@@ -203,6 +204,8 @@ export function UserProvider({ children }) {
   }, [])
 
   const logout = useCallback(() => {
+    // Free this device's video slot while the login token still works.
+    endPlaybackSession(localStorage.getItem(TOKEN_KEY))
     setToken(null)
     setUser(null)
     setPurchasedCourses([])

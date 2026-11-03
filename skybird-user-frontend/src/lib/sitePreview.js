@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from "react";
 
 const ADMIN_ORIGINS = [
-  import.meta.env.VITE_ADMIN_URL || "https://sky-birds-solutions-admin.vercel.app",
+  import.meta.env.VITE_ADMIN_URL || "https://admin.skybirdssolution.com",
   ...(import.meta.env.DEV ? ["http://localhost:3000"] : []),
 ].map((url) => new URL(url).origin);
 

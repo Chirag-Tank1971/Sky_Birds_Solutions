@@ -9,6 +9,7 @@ const {
   saveLessonProgress,
   getCourseProgress,
   getWatchHistory,
+  endPlaybackSession,
 } = require("../controllers/customerController");
 const { getContentForCustomer } = require("../controllers/learningContentController");
 const { sendContactOtp, verifyContactOtp, changePassword } = require("../controllers/authController");
@@ -23,6 +24,7 @@ router.get("/history", getWatchHistory);
 router.get("/learning-content/:type", getContentForCustomer);
 router.get("/progress/:courseId", getCourseProgress);
 router.put("/progress/:courseId/:lessonId", saveLessonProgress);
+router.delete("/playback/session", endPlaybackSession);
 router.post("/password", changePassword);
 router.post("/contact/send-otp", sendContactOtp);
 router.post("/contact/verify-otp", verifyContactOtp);

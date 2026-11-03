@@ -19,6 +19,7 @@ playwright-report/
 # Local tool settings and logs
 .claude/
 *.log
+docs/
 
 # Internal reports (not part of the site)
 Skybirds-*.pdf

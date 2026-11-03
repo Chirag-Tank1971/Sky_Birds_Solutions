@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const Course = require("../models/Course");
 const bunnyStream = require("../services/bunnyStream");
+const playbackSessions = require("../services/playbackSessions");
 const { isLessonLocked, publicVideos, publicModules } = require("../services/courseContent");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
@@ -118,11 +119,21 @@ exports.createPlaybackAuthorization = async (req, res) => {
     const secureVideoId = lesson?.videoId || (course.videos?.length === 0 ? "" : null);
     if (!secureVideoId) return res.status(404).json({ success: false, message: "Video not found for this course" });
 
+    // Customers get this device's session (newest devices win) and its watermark code. Admin previews don't take a slot.
+    let session = {};
+    if (auth.role !== "admin") {
+      const userAgent = req.get("user-agent") || "";
+      const claimed = await playbackSessions.claim(auth.user._id, req.get("x-playback-session"), { userAgent, courseId: course._id });
+      await playbackSessions.recordPlayback({ userId: auth.user._id, courseId: course._id, lessonId: lesson?.id || "", code: claimed.code, userAgent });
+      session = { session: claimed.id, watermarkCode: claimed.code };
+      console.log(JSON.stringify({ event: "playback_authorized", course: course.id }));
+    }
+
     // Bunny Stream lessons play in Bunny's embed player through a short-lived signed link.
     if (lesson?.provider === "bunny") {
       if (!bunnyStream.isConfigured()) return res.status(503).json({ success: false, message: "Video service is not available" });
       res.set("Cache-Control", "private, no-store");
-      return res.status(200).json({ success: true, provider: "bunny", ...bunnyStream.embedUrl(secureVideoId) });
+      return res.status(200).json({ success: true, provider: "bunny", ...bunnyStream.embedUrl(secureVideoId), ...session });
     }
 
     if (getVideoStatus(secureVideoId).status !== "ready") {
@@ -143,6 +154,7 @@ exports.createPlaybackAuthorization = async (req, res) => {
       token,
       expiresIn: Number(process.env.PLAYBACK_TOKEN_TTL_SECONDS || 300),
       masterUrl: `/api/videos/${secureVideoId}/master.m3u8`,
+      ...session,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Failed to authorize playback" });

@@ -32,6 +32,9 @@ const {
   getCustomerById,
   updateCustomer,
   deleteCustomer,
+  getCustomerPlaybackSessions,
+  revokeCustomerPlaybackSessions,
+  tracePlaybackCode,
   getStats,
 } = require("../controllers/adminController");
 const {
@@ -192,6 +195,9 @@ router.delete("/learning-content/:id", deleteContent);
 
 router.get("/customers", getAllCustomers);
 router.get("/customers/:id", getCustomerById);
+router.get("/customers/:id/playback-sessions", getCustomerPlaybackSessions);
+router.delete("/customers/:id/playback-sessions", revokeCustomerPlaybackSessions);
+router.get("/playback-codes/:code", tracePlaybackCode);
 router.put("/customers/:id", updateCustomer);
 router.delete("/customers/:id", deleteCustomer);
 

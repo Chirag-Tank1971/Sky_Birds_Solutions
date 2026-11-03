@@ -5,6 +5,7 @@ const { publicVideos, publicModules, isLessonLocked, moduleOf } = require("../se
 const { findCourse } = require("../services/courseEditing");
 const Course = require("../models/Course");
 const LessonProgress = require("../models/LessonProgress");
+const playbackSessions = require("../services/playbackSessions");
 // Registers the Course model used by populate() below.
 require("../models/Course");
 
@@ -49,6 +50,12 @@ exports.saveLessonProgress = async (req, res) => {
     const lesson = course.videos.find((item) => item.id === req.params.lessonId);
     if (!lesson) return res.status(404).json({ success: false, message: "Lesson not found" });
     if (isLessonLocked(course, lesson)) return res.status(403).json({ success: false, message: "This lesson is coming soon." });
+
+    // Progress saves are the player's heartbeat: a device that another device replaced stops here.
+    if ((await playbackSessions.touch(req.user._id, req.get("x-playback-session"))) === "ended") {
+      console.log(JSON.stringify({ event: "playback_session_ended" }));
+      return res.status(409).json({ success: false, code: "SESSION_ENDED", message: "This account started playing on another device." });
+    }
 
     const set = { position: duration ? Math.min(position, duration) : position, duration, lastWatchedAt: new Date() };
     if (req.body?.completed === true || (duration > 0 && position / duration >= COMPLETED_AT)) set.completed = true;
@@ -113,6 +120,18 @@ exports.getWatchHistory = async (req, res) => {
   } catch (error) {
     console.error("Get watch history failed:", error.message);
     return res.status(500).json({ success: false, message: "Unable to load history" });
+  }
+};
+
+// @desc    Stop playback on this device (logout)
+// @route   DELETE /api/customer/playback/session
+exports.endPlaybackSession = async (req, res) => {
+  try {
+    await playbackSessions.end(req.user._id, req.get("x-playback-session"));
+    return res.status(204).end();
+  } catch (error) {
+    console.error("End playback session failed:", error.message);
+    return res.status(500).json({ success: false, message: "Unable to end playback" });
   }
 };
 

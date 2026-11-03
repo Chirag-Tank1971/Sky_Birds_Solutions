@@ -7,7 +7,12 @@ const API_BASE = "https://video.bunnycdn.com";
 const TUS_ENDPOINT = "https://video.bunnycdn.com/tusupload";
 const EMBED_BASE = "https://iframe.mediadelivery.net/embed";
 const UPLOAD_LINK_SECONDS = 6 * 60 * 60;
-const EMBED_LINK_SECONDS = 6 * 60 * 60;
+const MAX_EMBED_LINK_SECONDS = 6 * 60 * 60;
+// How long a signed player link works. Shorter is safer; the player fetches a new link if one fails.
+const embedLinkSeconds = () => {
+  const value = Math.round(Number(process.env.BUNNY_EMBED_TTL_SECONDS));
+  return Number.isFinite(value) && value > 0 ? Math.min(MAX_EMBED_LINK_SECONDS, Math.max(60, value)) : MAX_EMBED_LINK_SECONDS;
+};
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
 
@@ -80,16 +85,17 @@ async function deleteVideo(videoId) {
 // Signed embed link: sha256(token_key + video_id + expires). Without a token key (token auth off) it is unsigned.
 function embedUrl(videoId) {
   const lib = coursesLibrary();
+  const lifetime = embedLinkSeconds();
   const url = new URL(`${EMBED_BASE}/${lib.libraryId}/${encodeURIComponent(videoId)}`);
   if (lib.tokenKey) {
-    const expires = Math.floor(Date.now() / 1000) + EMBED_LINK_SECONDS;
+    const expires = Math.floor(Date.now() / 1000) + lifetime;
     url.searchParams.set("token", sha256(`${lib.tokenKey}${videoId}${expires}`));
     url.searchParams.set("expires", String(expires));
   }
   url.searchParams.set("autoplay", "false");
   url.searchParams.set("preload", "true");
   url.searchParams.set("responsive", "true");
-  return { embedUrl: url.toString(), expiresIn: EMBED_LINK_SECONDS };
+  return { embedUrl: url.toString(), expiresIn: lifetime };
 }
 
 module.exports = { isConfigured, createUpload, signUpload, getStatus, deleteVideo, embedUrl };
